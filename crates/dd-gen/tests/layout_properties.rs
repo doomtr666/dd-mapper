@@ -9,25 +9,27 @@ use proptest::prelude::*;
 const ON_LINE: f64 = 1e-9;
 
 fn bsp_params() -> impl Strategy<Value = BspParams> {
-    (8_u32..40, 8_u32..30, 2_u32..5, any::<u64>()).prop_map(|(width, height, min_room, seed)| {
-        BspParams {
-            width,
-            height,
+    (8_u32..40, 8_u32..30, 2_u32..5, 1_u32..4, any::<u64>()).prop_map(
+        |(width, height, min_room, margin, seed)| BspParams {
+            width: width + 2 * (margin - 1),
+            height: height + 2 * (margin - 1),
             min_room,
+            margin,
             seed,
-        }
-    })
+        },
+    )
 }
 
 fn hab_params() -> impl Strategy<Value = HabParams> {
-    (16_u32..48, 8_u32..20, 3_u32..6, any::<u64>()).prop_map(|(width, height, min_room, seed)| {
-        HabParams {
-            width,
-            height,
+    (16_u32..48, 8_u32..20, 3_u32..6, 1_u32..4, any::<u64>()).prop_map(
+        |(width, height, min_room, margin, seed)| HabParams {
+            width: width + 2 * (margin - 1),
+            height: height + 2 * (margin - 1),
             min_room,
+            margin,
             seed,
-        }
-    })
+        },
+    )
 }
 
 fn segments(points: &[CellPoint]) -> Vec<Segment> {
@@ -125,6 +127,29 @@ fn assert_clear_of_junctions(layout: &Layout, clearance: f64) -> Result<(), Test
     Ok(())
 }
 
+/// The cells inside the margin.
+fn building_cells(width: u32, height: u32, margin: u32) -> u64 {
+    u64::from(width - 2 * margin) * u64::from(height - 2 * margin)
+}
+
+/// Every outline corner keeps `margin` cells from the map edges.
+fn assert_within_margin(
+    layout: &Layout,
+    (width, height): (u32, u32),
+    margin: u32,
+) -> Result<(), TestCaseError> {
+    let (low, high_x, high_y) = (
+        margin.cast_signed(),
+        (width - margin).cast_signed(),
+        (height - margin).cast_signed(),
+    );
+    for point in &layout.outline {
+        prop_assert!(point.x >= low && point.x <= high_x, "{point:?}");
+        prop_assert!(point.y >= low && point.y <= high_y, "{point:?}");
+    }
+    Ok(())
+}
+
 fn entrances(layout: &Layout) -> usize {
     layout
         .doors
@@ -137,7 +162,8 @@ proptest! {
     #[test]
     fn bsp_layouts_are_sound(params in bsp_params()) {
         let layout = bsp(params);
-        assert_sound(&layout, u64::from(params.width - 2) * u64::from(params.height - 2))?;
+        assert_sound(&layout, building_cells(params.width, params.height, params.margin))?;
+        assert_within_margin(&layout, (params.width, params.height), params.margin)?;
         prop_assert_eq!(layout.partitions.len() + 1, layout.areas.len());
         prop_assert_eq!(entrances(&layout), 1);
     }
@@ -145,8 +171,9 @@ proptest! {
     #[test]
     fn bsp_rooms_respect_the_minimum(params in bsp_params()) {
         for area in &bsp(params).areas {
-            prop_assert!(area.width >= params.min_room.min(params.width - 2));
-            prop_assert!(area.height >= params.min_room.min(params.height - 2));
+            let margins = 2 * params.margin;
+            prop_assert!(area.width >= params.min_room.min(params.width - margins));
+            prop_assert!(area.height >= params.min_room.min(params.height - margins));
         }
     }
 
@@ -161,7 +188,8 @@ proptest! {
     #[test]
     fn hab_blocks_are_sound(params in hab_params()) {
         let layout = hab_block(params);
-        assert_sound(&layout, u64::from(params.width - 2) * u64::from(params.height - 2))?;
+        assert_sound(&layout, building_cells(params.width, params.height, params.margin))?;
+        assert_within_margin(&layout, (params.width, params.height), params.margin)?;
         assert_clear_of_junctions(&layout, 1.0)?;
         prop_assert_eq!(entrances(&layout), 2);
     }
@@ -186,6 +214,7 @@ proptest! {
     fn ship_decks_have_a_bow_and_one_entrance(params in hab_params()) {
         let layout = ship_deck(params);
         prop_assert_eq!(layout.outline.len(), 5);
+        assert_within_margin(&layout, (params.width, params.height), params.margin)?;
         let hull = Polygon::new(layout.outline.clone());
         prop_assert!(hull.is_ok(), "{:?}", layout.outline);
         prop_assert_eq!(entrances(&layout), 1);

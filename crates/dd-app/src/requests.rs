@@ -42,6 +42,14 @@ pub struct RoomRequest {
     pub wall: String,
 }
 
+/// A floor tileset painted over an area, such as one room of a building.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FloorRequest {
+    pub shape: Shape,
+    /// Asset path of the floor tileset.
+    pub tileset: String,
+}
+
 /// A free-standing wall through `points`, such as a partition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WallRequest {

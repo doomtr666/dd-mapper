@@ -43,6 +43,8 @@ pub enum AppError {
     InvalidColor(String),
     #[error("this generator needs a map of at least {width} x {height} cells")]
     MapTooSmall { width: u32, height: u32 },
+    #[error("give at least one object asset to scatter")]
+    NothingToScatter,
     #[error(transparent)]
     Grid(#[from] GridError),
     #[error(transparent)]

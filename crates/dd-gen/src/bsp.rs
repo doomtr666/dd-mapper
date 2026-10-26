@@ -9,11 +9,13 @@ const ELONGATED: f64 = 1.25;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BspParams {
-    /// Map size, in cells; the building leaves a one-cell margin.
+    /// Map size, in cells.
     pub width: u32,
     pub height: u32,
     /// Smallest room side, in cells.
     pub min_room: u32,
+    /// Cells left free around the building, for engines or a courtyard.
+    pub margin: u32,
     pub seed: u64,
 }
 
@@ -21,11 +23,12 @@ pub struct BspParams {
 /// so every room can be reached. An entrance opens in the outline.
 #[must_use]
 pub fn bsp(params: BspParams) -> Layout {
+    let margin = params.margin;
     let building = Area {
-        x: 1,
-        y: 1,
-        width: params.width.saturating_sub(2).max(1),
-        height: params.height.saturating_sub(2).max(1),
+        x: margin.cast_signed(),
+        y: margin.cast_signed(),
+        width: params.width.saturating_sub(2 * margin).max(1),
+        height: params.height.saturating_sub(2 * margin).max(1),
     };
     let mut builder = Builder {
         random: Random::new(params.seed),

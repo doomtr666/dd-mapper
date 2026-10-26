@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     AssetPath, Cell, CellPoint, CellPosition, GridSize, Light, MergeError, Partition, Pattern,
-    Prop, Room, Segment, WallLoop, joins, merge,
+    Polygon, Prop, Room, Segment, WallLoop, joins, merge,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -83,6 +83,10 @@ pub enum MapError {
     LightOutsideGrid { center: CellPosition },
     #[error("prop center ({}, {}) lies outside the map", center.x, center.y)]
     PropOutsideGrid { center: CellPosition },
+    #[error("floor vertex ({}, {}) lies outside the map", vertex.x, vertex.y)]
+    FloorOutsideGrid { vertex: CellPoint },
+    #[error("there is no prop {0:?}")]
+    UnknownProp(PropId),
 }
 
 /// The whole map: its grid, rooms, free-standing walls, doors, props and floor tiles.
@@ -96,6 +100,8 @@ pub struct Map {
     partitions: Vec<(PartitionId, Partition)>,
     lights: Vec<(LightId, Light)>,
     patterns: Vec<(PatternId, Pattern)>,
+    /// Terrain texture covering the whole ground, under rooms.
+    background: Option<AssetPath>,
     next_room_id: u32,
     next_door_id: u32,
     next_prop_id: u32,
@@ -116,6 +122,7 @@ impl Map {
             partitions: Vec::new(),
             lights: Vec::new(),
             patterns: Vec::new(),
+            background: None,
             next_room_id: 0,
             next_door_id: 0,
             next_prop_id: 0,
@@ -170,6 +177,25 @@ impl Map {
     /// Paints one cell with a floor tileset.
     pub fn paint_floor(&mut self, cell: Cell, tileset: &AssetPath) {
         self.floor.insert(cell, tileset.clone());
+    }
+
+    /// Paints every cell the area overlaps with a floor tileset, walls or not;
+    /// returns how many.
+    ///
+    /// # Errors
+    /// Fails when a vertex of the area lies outside the map.
+    pub fn paint_area(&mut self, area: &Polygon, tileset: &AssetPath) -> Result<usize, MapError> {
+        if let Some(vertex) = self.first_outside_grid(area.vertices()) {
+            return Err(MapError::FloorOutsideGrid { vertex });
+        }
+        let cells: Vec<Cell> = area
+            .bounding_cells()
+            .filter(|cell| area.overlaps_cell(*cell))
+            .collect();
+        for cell in &cells {
+            self.paint_floor(*cell, tileset);
+        }
+        Ok(cells.len())
     }
 
     /// Where the door stands on its wall.
@@ -367,6 +393,17 @@ impl Map {
         Ok(id)
     }
 
+    /// # Errors
+    /// Fails when there is no such prop.
+    pub fn remove_prop(&mut self, id: PropId) -> Result<Prop, MapError> {
+        let index = self
+            .props
+            .iter()
+            .position(|(candidate, _)| *candidate == id)
+            .ok_or(MapError::UnknownProp(id))?;
+        Ok(self.props.remove(index).1)
+    }
+
     pub fn props(&self) -> impl Iterator<Item = (PropId, &Prop)> {
         self.props.iter().map(|(id, prop)| (*id, prop))
     }
@@ -428,6 +465,37 @@ impl Map {
 
     pub fn patterns(&self) -> impl Iterator<Item = (PatternId, &Pattern)> {
         self.patterns.iter().map(|(id, pattern)| (*id, pattern))
+    }
+
+    pub fn set_background(&mut self, terrain: AssetPath) {
+        self.background = Some(terrain);
+    }
+
+    #[must_use]
+    pub fn background(&self) -> Option<&AssetPath> {
+        self.background.as_ref()
+    }
+
+    /// Every asset the map uses, once per use.
+    pub fn assets(&self) -> impl Iterator<Item = &AssetPath> {
+        let rooms = self.rooms.iter().map(|(_, room)| room.wall());
+        let partitions = self
+            .partitions
+            .iter()
+            .map(|(_, partition)| partition.wall());
+        let doors = self.doors.iter().map(|(_, door)| &door.asset);
+        let props = self.props.iter().map(|(_, prop)| &prop.asset);
+        let lights = self.lights.iter().map(|(_, light)| &light.asset);
+        let patterns = self.patterns.iter().map(|(_, pattern)| &pattern.asset);
+        self.floor
+            .values()
+            .chain(rooms)
+            .chain(partitions)
+            .chain(doors)
+            .chain(props)
+            .chain(lights)
+            .chain(patterns)
+            .chain(self.background.iter())
     }
 
     /// Floor tileset of every painted cell, column by column.
@@ -631,6 +699,92 @@ mod tests {
         let second = map.add_prop(prop_at(35.0, 20.0)).unwrap();
         assert_eq!((first, second), (PropId(0), PropId(1)));
         assert_eq!(map.props().count(), 2);
+    }
+
+    #[test]
+    fn removed_props_leave_their_id_unused() {
+        let mut map = map();
+        let first = map.add_prop(prop_at(3.5, 4.5)).unwrap();
+        map.add_prop(prop_at(5.5, 4.5)).unwrap();
+        assert_eq!(map.remove_prop(first), Ok(prop_at(3.5, 4.5)));
+        assert_eq!(map.remove_prop(first), Err(MapError::UnknownProp(first)));
+        assert_eq!(map.add_prop(prop_at(3.5, 4.5)), Ok(PropId(2)));
+        assert_eq!(map.props().count(), 2);
+    }
+
+    #[test]
+    fn areas_repaint_the_floor_cells_they_cover() {
+        let mut map = map();
+        let plain = AssetPath::new("plain.webp").unwrap();
+        let grate = AssetPath::new("grate.webp").unwrap();
+        map.add_room(room(0, 0, 4, 3), &plain).unwrap();
+        let area = Polygon::rectangle(CellPoint::new(2, 1), 2, 2).unwrap();
+        assert_eq!(map.paint_area(&area, &grate), Ok(4));
+        let grated: Vec<Cell> = map
+            .floor()
+            .filter(|(_, tileset)| **tileset == grate)
+            .map(|(cell, _)| cell)
+            .collect();
+        assert_eq!(
+            grated,
+            [
+                Cell::new(2, 1),
+                Cell::new(2, 2),
+                Cell::new(3, 1),
+                Cell::new(3, 2)
+            ]
+        );
+        assert_eq!(map.floor().count(), 12);
+        let outside = Polygon::rectangle(CellPoint::new(34, 0), 2, 2).unwrap();
+        assert!(matches!(
+            map.paint_area(&outside, &grate),
+            Err(MapError::FloorOutsideGrid { vertex }) if vertex.x == 36
+        ));
+    }
+
+    #[test]
+    fn lists_every_asset_it_uses() {
+        let mut map = map();
+        let path = |name: &str| AssetPath::new(name).unwrap();
+        map.add_room(room(0, 0, 6, 4), &path("floor.webp")).unwrap();
+        let wall_ref = WallRef::Room {
+            room: RoomId(0),
+            wall: WallLoop::Outline,
+        };
+        let door = Door {
+            position: WallPosition {
+                wall: wall_ref,
+                segment: 0,
+                t: 0.5,
+            },
+            asset: path("door.webp"),
+        };
+        map.add_door(door).unwrap();
+        map.add_partition(partition(&[(3, 0), (3, 4)])).unwrap();
+        map.add_prop(prop_at(1.5, 1.5)).unwrap();
+        map.set_background(path("void.png"));
+        let mut assets: Vec<&str> = map.assets().map(AssetPath::as_str).collect();
+        assets.sort_unstable();
+        assets.dedup();
+        assert_eq!(
+            assets,
+            [
+                "crate.webp",
+                "door.webp",
+                "floor.webp",
+                "void.png",
+                "wall.webp"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_background_is_unset_until_chosen() {
+        let mut map = map();
+        assert_eq!(map.background(), None);
+        let void = AssetPath::new("res://textures/terrain/terrain_void.png").unwrap();
+        map.set_background(void.clone());
+        assert_eq!(map.background(), Some(&void));
     }
 
     #[test]

@@ -13,6 +13,9 @@ use crate::ids::{
 pub fn describe(map_label: &str, map: &Map) -> String {
     let grid = map.grid();
     let mut text = format!("{map_label}: {} x {} cells\n", grid.width(), grid.height());
+    if let Some(background) = map.background() {
+        text.push_str(&background_line(background));
+    }
     if map.rooms().next().is_none() {
         text.push_str("No room yet.\n");
     } else {
@@ -52,6 +55,14 @@ pub fn describe(map_label: &str, map: &Map) -> String {
         }
     }
     text
+}
+
+fn background_line(background: &AssetPath) -> String {
+    format!(
+        "Background: {}
+",
+        asset_name(background)
+    )
 }
 
 fn room_line(id: RoomId, room: &Room) -> String {

@@ -6,6 +6,7 @@
 mod color;
 mod decoration;
 mod ground;
+mod header;
 mod hex;
 mod level;
 mod map_file;
@@ -15,6 +16,7 @@ mod wall;
 pub use color::Color;
 pub use decoration::{Light, Object, Pattern};
 pub use ground::{Cave, Shapes, Terrain, Tiles};
+pub use header::{Header, PackEntry};
 pub use level::Level;
 pub use map_file::{MapFile, World};
 pub use node_id::{NodeId, decimal as decimal_node_ids};

@@ -4,7 +4,9 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use base64::Engine as _;
-use dd_app::{AppError, LayoutReport, LayoutRequest, OpenReport, RoomReport, Workspace};
+use dd_app::{
+    AppError, LayoutReport, LayoutRequest, OpenReport, RoomReport, ScatterReport, Workspace,
+};
 use dd_catalog::AssetQuery;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
@@ -19,9 +21,10 @@ use rmcp::{ErrorData, RoleServer, ServerHandler, tool, tool_handler, tool_router
 
 use crate::guidance::{DESIGN_PROMPT_DESCRIPTION, DESIGN_PROMPT_NAME, INSTRUCTIONS, design_prompt};
 use crate::params::{
-    CatalogSearchParams, DEFAULT_PIXELS_PER_CELL, DoorAddParams, LayoutGenerateParams,
-    LightAddParams, MapIdParams, MapNewParams, MapOpenParams, MapPreviewParams, MapSaveParams,
-    PatternAddParams, PropPlaceParams, RoomAddParams, WallAddParams,
+    CatalogSearchParams, DEFAULT_PIXELS_PER_CELL, DoorAddParams, FloorPaintParams,
+    LayoutGenerateParams, LightAddParams, MapBackgroundParams, MapIdParams, MapNewParams,
+    MapOpenParams, MapPreviewParams, MapSaveParams, PatternAddParams, PropPlaceParams,
+    PropRemoveParams, PropScatterParams, RoomAddParams, WallAddParams,
 };
 
 const SERVER_NAME: &str = "dd-mapper";
@@ -128,6 +131,51 @@ degrees. Its footprint is the asset's real size. Returns the prop id."
     fn prop_place(&self, Parameters(params): Parameters<PropPlaceParams>) -> CallToolResult {
         let (map, request) = params.into_request();
         reply(self.with_workspace(|workspace| workspace.place_prop(&map, &request)))
+    }
+
+    #[tool(
+        description = "Repaint the floor of an area with another tileset (kind tileset), \
+such as one room of a building: a grating for the engine room, plates for the bridge, worn \
+decking for cabins. Walls stay as they are."
+    )]
+    fn floor_paint(&self, Parameters(params): Parameters<FloorPaintParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        let painted = self.with_workspace(|workspace| workspace.paint_floor(&map, &request));
+        reply(painted.map(|cells| format!("Painted {cells} cells.")))
+    }
+
+    #[tool(description = "Remove a prop, for instance to place it again turned another way.")]
+    fn prop_remove(&self, Parameters(params): Parameters<PropRemoveParams>) -> CallToolResult {
+        let removed =
+            self.with_workspace(|workspace| workspace.remove_prop(&params.map_id, &params.prop_id));
+        reply(removed.map(|()| format!("Removed {}.", params.prop_id)))
+    }
+
+    #[tool(
+        description = "Strew small props at random over an area: debris, cans, papers, \
+cables, bones... Each is picked among the given assets and turned at random, inside a room, \
+clear of walls, doorways and other props. Use it for clutter, not for furniture. Returns the \
+prop ids."
+    )]
+    fn prop_scatter(&self, Parameters(params): Parameters<PropScatterParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        let report = self.with_workspace(|workspace| workspace.scatter(&map, &request));
+        reply(report.map(|report| scatter_report(&report)))
+    }
+
+    #[tool(
+        description = "Cover the whole ground of a map, around and under the rooms, with a \
+terrain texture (kind terrain): the void of space, rock, sand..."
+    )]
+    fn map_background(
+        &self,
+        Parameters(params): Parameters<MapBackgroundParams>,
+    ) -> CallToolResult {
+        let set = self
+            .with_workspace(|workspace| workspace.set_background(&params.map_id, &params.asset));
+        let name = params.asset.rsplit('/').next().unwrap_or_default();
+        let name = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+        reply(set.map(|()| format!("{} now lies on {name}.", params.map_id)))
     }
 
     #[tool(
@@ -323,6 +371,21 @@ fn room_report(report: &RoomReport) -> String {
         ));
     }
     parts.join("; ")
+}
+
+fn scatter_report(report: &ScatterReport) -> String {
+    let placed = match report.props.as_slice() {
+        [] => "Placed no prop".to_owned(),
+        [only] => format!("Placed 1 prop: {only}"),
+        [first, .., last] => format!("Placed {} props: {first} to {last}", report.props.len()),
+    };
+    if report.missing == 0 {
+        return format!("{placed}.");
+    }
+    format!(
+        "{placed}; {} found no free spot, so the area is full: use a larger area or fewer props.",
+        report.missing
+    )
 }
 
 fn layout_report(report: &LayoutReport) -> String {

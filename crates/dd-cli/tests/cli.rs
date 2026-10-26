@@ -122,7 +122,7 @@ fn searches_and_summarizes_the_catalog() {
     let summary = dd_mapper(&[Path::new("catalog")]);
     assert_success(&summary);
     assert!(
-        stdout(&summary).starts_with("6 assets.\n"),
+        stdout(&summary).starts_with("8 assets.\n"),
         "{}",
         stdout(&summary)
     );

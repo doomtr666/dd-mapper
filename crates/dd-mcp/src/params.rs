@@ -1,8 +1,8 @@
 //! Tool parameters, as the model sends them. Positions and sizes are in cells.
 
 use dd_app::{
-    DEFAULT_MIN_ROOM, DoorRequest, Generator, LayoutRequest, LightRequest, PatternRequest,
-    PropRequest, RoomRequest, Shape, WallRequest,
+    DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest, FloorRequest, Generator, LayoutRequest,
+    LightRequest, PatternRequest, PropRequest, RoomRequest, ScatterRequest, Shape, WallRequest,
 };
 use dd_catalog::{AssetKind, AssetQuery};
 use schemars::JsonSchema;
@@ -309,12 +309,15 @@ impl From<GeneratorParams> for Generator {
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct LayoutGenerateParams {
     pub generator: GeneratorParams,
-    /// Map width in cells; the building leaves a one-cell margin.
+    /// Map width in cells.
     pub width: u32,
     /// Map height in cells.
     pub height: u32,
     /// Narrowest room in cells, 3 by default.
     pub min_room: Option<u32>,
+    /// Free cells around the building, 1 by default: 4 leaves room for engines
+    /// behind a ship deck.
+    pub margin: Option<u32>,
     /// The same seed draws the same building; change it for another one.
     #[serde(default)]
     pub seed: u64,
@@ -333,10 +336,71 @@ impl From<LayoutGenerateParams> for LayoutRequest {
             width: params.width,
             height: params.height,
             min_room: params.min_room.unwrap_or(DEFAULT_MIN_ROOM),
+            margin: params.margin.unwrap_or(DEFAULT_MARGIN),
             seed: params.seed,
             floor: params.floor,
             wall: params.wall,
             door: params.door,
         }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct PropRemoveParams {
+    pub map_id: String,
+    /// Id of the prop, such as `P3`.
+    pub prop_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct PropScatterParams {
+    pub map_id: String,
+    /// Asset paths of small objects to pick from at random (`catalog_search` kind
+    /// `object`): debris, cans, papers, cables, bones...
+    pub assets: Vec<String>,
+    /// The area to strew, on grid vertices; props stay inside rooms.
+    pub shape: ShapeParams,
+    /// How many props to place.
+    pub count: u32,
+    /// The same seed strews the same way; change it for another layout.
+    #[serde(default)]
+    pub seed: u64,
+}
+
+impl PropScatterParams {
+    pub fn into_request(self) -> (String, ScatterRequest) {
+        let request = ScatterRequest {
+            assets: self.assets,
+            area: self.shape.into(),
+            count: self.count,
+            seed: self.seed,
+        };
+        (self.map_id, request)
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct MapBackgroundParams {
+    pub map_id: String,
+    /// Asset path of a terrain texture (`catalog_search` kind `terrain`).
+    pub asset: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct FloorPaintParams {
+    pub map_id: String,
+    /// The area to repaint, on grid vertices, such as one room.
+    pub shape: ShapeParams,
+    /// Asset path of a floor tileset (`catalog_search` kind `tileset`).
+    pub tileset: String,
+}
+
+impl FloorPaintParams {
+    pub fn into_request(self) -> (String, FloorRequest) {
+        let request = FloorRequest {
+            shape: self.shape.into(),
+            tileset: self.tileset,
+        };
+        (self.map_id, request)
     }
 }

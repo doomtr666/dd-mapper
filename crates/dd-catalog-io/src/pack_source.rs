@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::{BufReader, Read, Seek};
 use std::path::PathBuf;
 
-use dd_catalog::{Asset, AssetKind, AssetSource, CellSize, SourceError};
+use dd_catalog::{Asset, AssetKind, AssetSource, CellSize, PackInfo, SourceError};
 use dd_domain::AssetPath;
 use serde::Deserialize;
 use thiserror::Error;
@@ -47,16 +47,54 @@ impl PackIndexSource {
     }
 }
 
-impl AssetSource for PackIndexSource {
-    fn assets(&self) -> Result<Vec<Asset>, SourceError> {
-        let read = || -> Result<Vec<Asset>, PackError> {
+impl PackIndexSource {
+    fn read<T>(
+        &self,
+        reader: fn(&mut BufReader<File>) -> Result<T, PackError>,
+    ) -> Result<T, SourceError> {
+        let read = || -> Result<T, PackError> {
             let mut archive = BufReader::new(File::open(&self.archive)?);
-            assets_from_archive(&mut archive)
+            reader(&mut archive)
         };
         read().map_err(|error| SourceError {
             source_name: self.archive.display().to_string(),
             reason: error.to_string(),
         })
+    }
+}
+
+impl AssetSource for PackIndexSource {
+    fn assets(&self) -> Result<Vec<Asset>, SourceError> {
+        self.read(assets_from_archive)
+    }
+
+    fn packs(&self) -> Result<Vec<PackInfo>, SourceError> {
+        Ok(self.read(pack_from_archive)?.into_iter().collect())
+    }
+}
+
+/// What the pack says of itself; `None` for `Dungeondraft.pck`.
+///
+/// # Errors
+/// Fails when the archive or its manifest cannot be read.
+pub fn pack_from_archive<R: Read + Seek>(archive: &mut R) -> Result<Option<PackInfo>, PackError> {
+    let index = PckIndex::read(archive)?;
+    let manifest = read_manifest(archive, &index)?;
+    Ok(manifest.map(|manifest| PackInfo {
+        id: manifest.id,
+        name: manifest.name,
+        version: text_of(&manifest.version),
+        author: manifest.author,
+        keywords: manifest.keywords,
+    }))
+}
+
+/// A JSON string as is, any other value as JSON text, nothing as empty.
+fn text_of(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(text) => text.clone(),
+        serde_json::Value::Null => String::new(),
+        other => other.to_string(),
     }
 }
 
@@ -101,6 +139,14 @@ pub fn assets_from_archive<R: Read + Seek>(archive: &mut R) -> Result<Vec<Asset>
 #[derive(Debug, Deserialize)]
 struct Manifest {
     id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    version: serde_json::Value,
+    #[serde(default)]
+    author: String,
+    #[serde(default)]
+    keywords: String,
     #[serde(rename = "allow_3rd_party_mapping_software_to_read")]
     allow_reading: bool,
 }
@@ -262,9 +308,9 @@ fn texture_asset(entry_path: &str) -> Option<Asset> {
 mod tests {
     use std::io::Cursor;
 
-    use dd_catalog::{Asset, AssetKind};
+    use dd_catalog::{Asset, AssetKind, PackInfo};
 
-    use super::{PackError, assets_from_archive};
+    use super::{PackError, assets_from_archive, pack_from_archive};
     use crate::pck::tests::build_pck;
 
     const MANIFEST: &[u8] =
@@ -412,6 +458,29 @@ path="res://.import/crate_01.png-0123.stex"
         assert!(
             matches!(&error, PackError::ReadingNotAllowed { pack } if pack == "SECRET01"),
             "{error:?}"
+        );
+    }
+
+    #[test]
+    fn describes_the_pack_from_its_manifest() {
+        let manifest = br#"{"name": "LORE Starpunx A 3.16", "id": "LORESP01", "version": "3.16",
+            "author": "LORE", "allow_3rd_party_mapping_software_to_read": true}"#;
+        let archive = build_pck(&[("res://packs/LORESP01/pack.json", manifest)]);
+        let pack = pack_from_archive(&mut Cursor::new(archive)).unwrap();
+        assert_eq!(
+            pack,
+            Some(PackInfo {
+                id: "LORESP01".to_owned(),
+                name: "LORE Starpunx A 3.16".to_owned(),
+                version: "3.16".to_owned(),
+                author: "LORE".to_owned(),
+                keywords: String::new(),
+            })
+        );
+        let default_assets = build_pck(&[("res://textures/walls/stone.png", b"")]);
+        assert_eq!(
+            pack_from_archive(&mut Cursor::new(default_assets)).unwrap(),
+            None
         );
     }
 

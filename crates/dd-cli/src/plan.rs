@@ -5,6 +5,7 @@
 //! floor = "res://packs/.../Tileset_RT_Punched_Floor.webp"
 //! wall = "res://packs/.../Wall_Underhive_Industrial.webp"
 //! door = "res://packs/.../Door_Underhive_Industrial.webp"
+//! background = "res://textures/terrain/terrain_void.png"   # the ground around rooms
 //!
 //! [map]                        # a blank map...
 //! width = 30
@@ -16,6 +17,7 @@
 //! # height = 14
 //! # seed = 7
 //! # min_room = 3
+//! # margin = 1                 # free cells around the building
 //!
 //! [[room]]                     # R0, R1... in order
 //! shape = { type = "rectangle", x = 1, y = 1, width = 12, height = 8 }
@@ -39,6 +41,16 @@
 //! range = 5
 //! color = "80beff"
 //!
+//! [[floor]]                    # another floor for part of the map
+//! shape = { type = "rectangle", x = 7, y = 1, width = 6, height = 8 }
+//! tileset = "res://packs/.../Floor_SpaceShip_Grate_Worn.webp"
+//!
+//! [[scatter]]                  # clutter strewn at random inside rooms
+//! assets = ["res://packs/.../Debris_Can_Empty.webp"]
+//! shape = { type = "rectangle", x = 1, y = 1, width = 12, height = 8 }
+//! count = 15
+//! seed = 3
+//!
 //! [[pattern]]
 //! asset = "res://packs/.../Tileset_AncientGothic_Quarters_Sewer_Open.webp"
 //! shape = { type = "polygon", points = [[8, 2], [10, 2], [10, 4]] }
@@ -46,8 +58,9 @@
 
 use anyhow::Context as _;
 use dd_app::{
-    DEFAULT_MIN_ROOM, DoorRequest, Generator, LayoutRequest, LightRequest, PatternRequest,
-    PropRequest, RoomRequest, Shape, WallRequest, Workspace,
+    DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest, FloorRequest, Generator, LayoutRequest,
+    LightRequest, PatternRequest, PropRequest, RoomRequest, ScatterRequest, Shape, WallRequest,
+    Workspace,
 };
 use serde::Deserialize;
 
@@ -71,6 +84,10 @@ pub struct Plan {
     light: Vec<LightPlan>,
     #[serde(default)]
     pattern: Vec<PatternPlan>,
+    #[serde(default)]
+    scatter: Vec<ScatterPlan>,
+    #[serde(default)]
+    floor: Vec<FloorPlan>,
 }
 
 /// Assets used where an element names none.
@@ -80,6 +97,8 @@ struct Style {
     floor: Option<String>,
     wall: Option<String>,
     door: Option<String>,
+    /// Terrain texture covering the whole ground.
+    background: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -106,6 +125,7 @@ struct GeneratePlan {
     #[serde(default)]
     seed: u64,
     min_room: Option<u32>,
+    margin: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -175,6 +195,23 @@ struct PatternPlan {
     color: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FloorPlan {
+    shape: ShapePlan,
+    tileset: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScatterPlan {
+    assets: Vec<String>,
+    shape: ShapePlan,
+    count: u32,
+    #[serde(default)]
+    seed: u64,
+}
+
 impl Plan {
     /// # Errors
     /// Fails on invalid TOML or unknown keys.
@@ -188,12 +225,17 @@ impl Plan {
     /// Fails on the first element that cannot be added, naming it.
     pub fn build(&self, workspace: &mut Workspace) -> anyhow::Result<String> {
         let map = self.create_map(workspace)?;
+        if let Some(background) = &self.style.background {
+            workspace
+                .set_background(&map, background)
+                .context("[style] background")?;
+        }
         self.add_structure(workspace, &map)?;
         self.furnish(workspace, &map)?;
         Ok(map)
     }
 
-    /// Rooms, walls and doors.
+    /// Rooms, walls, doors and repainted floors.
     fn add_structure(&self, workspace: &mut Workspace, map: &str) -> anyhow::Result<()> {
         let style = &self.style;
         each(&self.room, "room", |room| {
@@ -207,10 +249,14 @@ impl Plan {
         each(&self.door, "door", |door| {
             workspace.add_door(map, &door.request(style)?)?;
             Ok(())
+        })?;
+        each(&self.floor, "floor", |floor| {
+            workspace.paint_floor(map, &floor.request())?;
+            Ok(())
         })
     }
 
-    /// Floor patterns, props and lights.
+    /// Floor patterns, props, clutter and lights.
     fn furnish(&self, workspace: &mut Workspace, map: &str) -> anyhow::Result<()> {
         each(&self.pattern, "pattern", |pattern| {
             workspace.add_pattern(map, &pattern.request())?;
@@ -218,6 +264,10 @@ impl Plan {
         })?;
         each(&self.prop, "prop", |prop| {
             workspace.place_prop(map, &prop.request())?;
+            Ok(())
+        })?;
+        each(&self.scatter, "scatter", |scatter| {
+            workspace.scatter(map, &scatter.request())?;
             Ok(())
         })?;
         each(&self.light, "light", |light| {
@@ -298,6 +348,7 @@ impl GeneratePlan {
             width: self.width,
             height: self.height,
             min_room: self.min_room.unwrap_or(DEFAULT_MIN_ROOM),
+            margin: self.margin.unwrap_or(DEFAULT_MARGIN),
             seed: self.seed,
             floor: styled(None, style.floor.as_ref(), "floor").context("[generate]")?,
             wall: styled(None, style.wall.as_ref(), "wall").context("[generate]")?,
@@ -364,6 +415,26 @@ impl LightPlan {
     }
 }
 
+impl FloorPlan {
+    fn request(&self) -> FloorRequest {
+        FloorRequest {
+            shape: (&self.shape).into(),
+            tileset: self.tileset.clone(),
+        }
+    }
+}
+
+impl ScatterPlan {
+    fn request(&self) -> ScatterRequest {
+        ScatterRequest {
+            assets: self.assets.clone(),
+            area: (&self.shape).into(),
+            count: self.count,
+            seed: self.seed,
+        }
+    }
+}
+
 impl PatternPlan {
     fn request(&self) -> PatternRequest {
         PatternRequest {
@@ -388,6 +459,7 @@ mod tests {
 floor = "res://packs/LOREGD01/textures/tilesets/simple/Tileset_RT_Punched_Floor.webp"
 wall = "res://packs/LOREGD01/textures/walls/Wall_Underhive_Industrial.webp"
 door = "res://packs/LOREGD01/textures/portals/Door_Underhive_Industrial.webp"
+background = "res://textures/terrain/terrain_void.png"
 "#;
 
     fn workspace() -> Workspace {
@@ -482,12 +554,30 @@ seed = 7
 [[light]]
 asset = "res://packs/LOREGD01/textures/lights/Effect_Caged_Light_Cast.webp"
 at = [3, 7]
+
+[[floor]]
+shape = { type = "rectangle", x = 1, y = 6, width = 28, height = 2 }
+tileset = "res://packs/LOREGD01/textures/tilesets/simple/Tileset_RT_Punched_Floor.webp"
+
+[[scatter]]
+assets = ["res://packs/LOREGD01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp"]
+shape = { type = "rectangle", x = 0, y = 0, width = 30, height = 14 }
+count = 10
+seed = 4
 "#,
         )
         .unwrap();
         let description = workspace.describe(&map).unwrap();
+        assert!(
+            description.contains("Background: terrain_void"),
+            "{description}"
+        );
         assert!(description.contains("W0:"), "{description}");
         assert!(description.contains("L0:"), "{description}");
+        assert!(
+            description.contains("P9: Debris_Can_Empty"),
+            "{description}"
+        );
         assert_eq!(workspace.validate(&map), Ok(vec![]));
     }
 

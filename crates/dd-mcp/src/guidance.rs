@@ -4,7 +4,9 @@ pub const INSTRUCTIONS: &str = "\
 Designs Dungeondraft maps on a grid of cells (one cell = 5 feet). \
 Find assets with catalog_search, create a map with map_new (or open one saved by \
 Dungeondraft with map_open, or draw a whole building with layout_generate), then add rooms, \
-partitions (wall_add), doors, props, lights (light_add) and floor patterns (pattern_add). Check your work \
+partitions (wall_add), doors, props, lights (light_add), floor patterns (pattern_add), \
+clutter (prop_scatter), a floor per room (floor_paint) and a background \
+(map_background). Check your work \
 with map_preview (an image with R/W/D/P/L ids) and map_describe, fix it, run map_validate, and \
 finish with map_save. Read the catalog://summary resource to know which packs \
 are available.";
@@ -42,7 +44,13 @@ or on a partition (W0), at a point on that wall.
 objects with catalog_search; footprints are real sizes in cells, so keep props \
 inside rooms and off doorways. Light the scene with light_add: caged lamps, \
 glowing tanks, window shafts (search kind light); a cold blue or a sickly green \
-sets the underhive mood. Add floor details with pattern_add: sewer grates, vent fans, hazard markings (search kind pattern). Preview again.
+sets the underhive mood. Seats and consoles of the LORE packs face down \
+(south) at 0 degrees, west at 90, north at 180 and east at 270; to turn a \
+prop, prop_remove it and place it again. Add floor details with pattern_add: sewer grates, vent fans, hazard markings (search kind pattern). Give rooms their own floor with floor_paint: \
+gratings, plates and worn decking set them apart. Then make it lived in: strew \
+clutter over each room with prop_scatter (debris, cans, papers, cables: small \
+objects only), and give the map a background with map_background (terrain_void \
+for the void of space, rock or ash outdoors). Preview again.
 8. Run map_validate, address the warnings, then map_save to a \
 .dungeondraft_map file and give its path."
     )

@@ -16,13 +16,13 @@ use crate::doors::{
     DoorWall, MAX_SNAP_DISTANCE, nearest_wall_position, partition_walls, room_walls,
 };
 use crate::ids::{
-    WallOwner, door_label, light_label, map_label, parse_map, parse_wall_owner, partition_label,
-    pattern_label, prop_label, room_label,
+    WallOwner, door_label, light_label, map_label, parse_map, parse_prop, parse_wall_owner,
+    partition_label, pattern_label, prop_label, room_label,
 };
 use crate::validate::validate;
 use crate::{
-    AppError, DoorRequest, LightRequest, MapFiles, PatternRequest, PreviewRenderer, PropRequest,
-    RoomRequest, WallRequest,
+    AppError, DoorRequest, FloorRequest, LightRequest, MapFiles, PatternRequest, PreviewRenderer,
+    PropRequest, RoomRequest, SaveFacts, WallRequest,
 };
 
 /// Pixels per cell in the editor, to turn portal radii into cells.
@@ -160,6 +160,19 @@ impl Workspace {
         })
     }
 
+    /// Repaints the floor under an area; returns how many cells changed.
+    ///
+    /// # Errors
+    /// Fails on an unknown map, an asset that is not a tileset, or an invalid
+    /// shape or one leaving the map.
+    pub fn paint_floor(&mut self, map: &str, request: &FloorRequest) -> Result<usize, AppError> {
+        let tileset = resolve(&self.catalog, &request.tileset, AssetKind::Tileset)?
+            .path
+            .clone();
+        let area = request.shape.to_polygon()?;
+        Ok(self.map_mut(map)?.paint_area(&area, &tileset)?)
+    }
+
     /// Adds a free-standing wall, such as a partition, and returns its id.
     ///
     /// # Errors
@@ -243,19 +256,34 @@ impl Workspace {
     /// or a position outside the map.
     pub fn place_prop(&mut self, map: &str, request: &PropRequest) -> Result<String, AppError> {
         let asset = resolve(&self.catalog, &request.asset, AssetKind::Object)?;
-        let size = asset.metrics.size;
-        let footprint = Footprint::new(
-            size.map_or(DEFAULT_PROP_SIDE, |size| size.width),
-            size.map_or(DEFAULT_PROP_SIDE, |size| size.height),
-        )?;
         let prop = Prop {
             asset: asset.path.clone(),
             center: CellPosition::new(request.x, request.y),
             rotation: QuarterTurn::from_degrees(request.rotation_degrees)?,
-            footprint,
+            footprint: footprint(asset)?,
         };
         let id = self.map_mut(map)?.add_prop(prop)?;
         Ok(prop_label(id))
+    }
+
+    /// # Errors
+    /// Fails on an unknown map or prop.
+    pub fn remove_prop(&mut self, map: &str, prop: &str) -> Result<(), AppError> {
+        let id = parse_prop(prop)?;
+        self.map_mut(map)?.remove_prop(id)?;
+        Ok(())
+    }
+
+    /// Covers the whole ground, around and under rooms, with a terrain texture.
+    ///
+    /// # Errors
+    /// Fails on an unknown map, or an asset that is not a terrain texture.
+    pub fn set_background(&mut self, map: &str, terrain: &str) -> Result<(), AppError> {
+        let terrain = resolve(&self.catalog, terrain, AssetKind::Terrain)?
+            .path
+            .clone();
+        self.map_mut(map)?.set_background(terrain);
+        Ok(())
     }
 
     /// # Errors
@@ -282,12 +310,12 @@ impl Workspace {
     /// Fails on an unknown map, or when the file cannot be written.
     pub fn save(&self, map: &str, destination: &Path) -> Result<(), AppError> {
         let (_, open) = self.entry(map)?;
-        self.files.save(
-            &open.map,
-            &self.portal_radii(),
-            open.origin.as_deref(),
-            destination,
-        )?;
+        let facts = SaveFacts {
+            portal_radii: self.portal_radii(),
+            packs: self.catalog.packs().cloned().collect(),
+        };
+        self.files
+            .save(&open.map, &facts, open.origin.as_deref(), destination)?;
         Ok(())
     }
 
@@ -314,7 +342,7 @@ impl Workspace {
         self.catalog.search(query)
     }
 
-    fn map(&self, label: &str) -> Result<(u32, &Map), AppError> {
+    pub(crate) fn map(&self, label: &str) -> Result<(u32, &Map), AppError> {
         let (number, open) = self.entry(label)?;
         Ok((number, &open.map))
     }
@@ -328,7 +356,7 @@ impl Workspace {
         Ok((number, open))
     }
 
-    fn map_mut(&mut self, label: &str) -> Result<&mut Map, AppError> {
+    pub(crate) fn map_mut(&mut self, label: &str) -> Result<&mut Map, AppError> {
         let number = parse_map(label)?;
         self.maps
             .get_mut(&number)
@@ -350,6 +378,15 @@ impl Workspace {
             })
             .collect()
     }
+}
+
+/// The space a prop of `asset` takes, a cell square when unknown.
+pub(crate) fn footprint(asset: &Asset) -> Result<Footprint, AppError> {
+    let size = asset.metrics.size;
+    Ok(Footprint::new(
+        size.map_or(DEFAULT_PROP_SIDE, |size| size.width),
+        size.map_or(DEFAULT_PROP_SIDE, |size| size.height),
+    )?)
 }
 
 /// Half the width of a door, in cells.
@@ -402,7 +439,6 @@ fn counts<K: std::fmt::Display>(counts: &BTreeMap<K, usize>) -> String {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::collections::HashMap;
     use std::path::{Path, PathBuf};
     use std::sync::{Arc, Mutex};
 
@@ -410,14 +446,15 @@ pub(crate) mod tests {
     use dd_domain::{Map, PropError};
 
     use super::{RoomReport, Workspace};
-    use crate::assets::tests::{CRATE, DOOR, FLOOR, GRATE, LIGHT, WALL, small_catalog};
+    use crate::assets::tests::{CRATE, DOOR, FLOOR, GRATE, LIGHT, VOID, WALL, small_catalog};
     use crate::{
-        AppError, DoorRequest, FootprintOf, LightRequest, MapFiles, OpenedMap, PatternRequest,
-        PortError, PreviewRenderer, PropRequest, RoomRequest, Shape, WallRequest,
+        AppError, DoorRequest, FloorRequest, FootprintOf, LightRequest, MapFiles, OpenedMap,
+        PatternRequest, PortError, PreviewRenderer, PropRequest, RoomRequest, SaveFacts, Shape,
+        WallRequest,
     };
 
-    /// What a save was asked: destination, radii, template and room count.
-    type Save = (PathBuf, HashMap<String, f64>, Option<PathBuf>, usize);
+    /// What a save was asked: destination, facts, template and room count.
+    type Save = (PathBuf, SaveFacts, Option<PathBuf>, usize);
     type Exports = Arc<Mutex<Vec<Save>>>;
 
     /// Opens a one-room map, telling the footprint it got for the crate;
@@ -440,13 +477,13 @@ pub(crate) mod tests {
         fn save(
             &self,
             map: &Map,
-            portal_radii: &HashMap<String, f64>,
+            facts: &SaveFacts,
             template: Option<&Path>,
             destination: &Path,
         ) -> Result<(), PortError> {
             self.0.lock().unwrap().push((
                 destination.to_owned(),
-                portal_radii.clone(),
+                facts.clone(),
                 template.map(Path::to_owned),
                 map.rooms().count(),
             ));
@@ -514,9 +551,10 @@ pub(crate) mod tests {
         let (workspace, _) = workspace();
         assert_eq!(
             workspace.catalog_summary(),
-            "6 assets.\n\
-             By pack: LOREGD01 (6).\n\
-             By kind: tilesets (1), walls (1), portals (1), objects (1), lights (1), patterns (1).\n"
+            "8 assets.\n\
+             By pack: LOREGD01 (7), default (1).\n\
+             By kind: tilesets (1), walls (1), portals (1), objects (2), lights (1), patterns (1), \
+             terrain (1).\n"
         );
     }
 
@@ -677,6 +715,62 @@ pub(crate) mod tests {
         );
     }
 
+    #[test]
+    fn props_can_be_removed_to_be_placed_again() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        workspace.place_prop(&map, &crate_at(5.0, 5.0, 90)).unwrap();
+        assert_eq!(workspace.remove_prop(&map, "P0"), Ok(()));
+        assert!(!workspace.describe(&map).unwrap().contains("P0"));
+        assert!(matches!(
+            workspace.remove_prop(&map, "P0"),
+            Err(AppError::Map(_))
+        ));
+        assert!(matches!(
+            workspace.remove_prop(&map, "R0"),
+            Err(AppError::MalformedId { kind: "prop", .. })
+        ));
+    }
+
+    #[test]
+    fn floors_can_be_repainted_room_by_room() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        workspace
+            .add_room(&map, &room(rectangle(0, 0, 6, 4)))
+            .unwrap();
+        let grating = FloorRequest {
+            shape: rectangle(3, 0, 3, 4),
+            tileset: FLOOR.to_owned(),
+        };
+        assert_eq!(workspace.paint_floor(&map, &grating), Ok(12));
+        let wall_as_floor = FloorRequest {
+            tileset: WALL.to_owned(),
+            ..grating
+        };
+        assert!(matches!(
+            workspace.paint_floor(&map, &wall_as_floor),
+            Err(AppError::WrongAssetKind { .. })
+        ));
+    }
+
+    #[test]
+    fn the_background_is_a_terrain_texture() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        assert_eq!(workspace.set_background(&map, VOID), Ok(()));
+        assert!(
+            workspace
+                .describe(&map)
+                .unwrap()
+                .contains("Background: terrain_void")
+        );
+        assert!(matches!(
+            workspace.set_background(&map, FLOOR),
+            Err(AppError::WrongAssetKind { .. })
+        ));
+    }
+
     fn light_at(x: f64, y: f64) -> LightRequest {
         LightRequest {
             asset: LIGHT.to_owned(),
@@ -802,9 +896,11 @@ pub(crate) mod tests {
             .save(&map, Path::new("out/keep.dungeondraft_map"))
             .unwrap();
         let exports = exports.lock().unwrap();
-        let (destination, radii, template, rooms) = &exports[0];
+        let (destination, facts, template, rooms) = &exports[0];
         assert_eq!(destination, Path::new("out/keep.dungeondraft_map"));
-        assert_eq!(radii.get(DOOR), Some(&154.0));
+        assert_eq!(facts.portal_radii.get(DOOR), Some(&154.0));
+        assert_eq!(facts.packs.len(), 1);
+        assert_eq!(facts.packs[0].name, "LORE Grimdorx A 3.09");
         assert_eq!(*template, None);
         assert_eq!(*rooms, 1);
     }

@@ -9,11 +9,13 @@ const CORRIDOR: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HabParams {
-    /// Map size, in cells; the building leaves a one-cell margin.
+    /// Map size, in cells.
     pub width: u32,
     pub height: u32,
     /// Narrowest cell, in cells.
     pub min_room: u32,
+    /// Cells left free around the building, for engines or a courtyard.
+    pub margin: u32,
     pub seed: u64,
 }
 
@@ -70,13 +72,14 @@ pub fn ship_deck(params: HabParams) -> Layout {
     layout
 }
 
-/// The building inside a one-cell margin, `bow` cells shorter.
+/// The building inside the margin, `bow` cells shorter.
 fn building(params: HabParams, bow: u32) -> Area {
+    let margin = params.margin;
     Area {
-        x: 1,
-        y: 1,
-        width: params.width.saturating_sub(2 + bow).max(1),
-        height: params.height.saturating_sub(2).max(CORRIDOR + 2),
+        x: margin.cast_signed(),
+        y: margin.cast_signed(),
+        width: params.width.saturating_sub(2 * margin + bow).max(1),
+        height: params.height.saturating_sub(2 * margin).max(CORRIDOR + 2),
     }
 }
 
@@ -184,6 +187,7 @@ mod tests {
             width: 12,
             height: 8,
             min_room: 0,
+            margin: 1,
             seed: 7,
         };
         assert!(hab_block(params).areas.iter().all(|area| area.width >= 1));

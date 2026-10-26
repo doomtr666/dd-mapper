@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{Asset, AssetKind, AssetSource, SourceError};
+use crate::{Asset, AssetKind, AssetSource, PackInfo, SourceError};
 
 /// Search criteria; every given criterion must match.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -19,6 +19,7 @@ pub struct AssetQuery {
 #[derive(Debug, Clone, Default)]
 pub struct Catalog {
     assets: BTreeMap<String, Asset>,
+    packs: BTreeMap<String, PackInfo>,
 }
 
 impl Catalog {
@@ -31,6 +32,9 @@ impl Catalog {
         for source in sources {
             for asset in source.assets()? {
                 catalog.add(asset);
+            }
+            for pack in source.packs()? {
+                catalog.add_pack(pack);
             }
         }
         Ok(catalog)
@@ -47,6 +51,15 @@ impl Catalog {
                 self.assets.insert(asset.path.as_str().to_owned(), asset);
             }
         }
+    }
+
+    pub fn add_pack(&mut self, pack: PackInfo) {
+        self.packs.insert(pack.id.clone(), pack);
+    }
+
+    /// The packs whose `pack.json` was read, by id.
+    pub fn packs(&self) -> impl Iterator<Item = &PackInfo> {
+        self.packs.values()
     }
 
     #[must_use]
@@ -145,7 +158,7 @@ mod tests {
     use dd_domain::AssetPath;
 
     use super::{AssetQuery, Catalog};
-    use crate::{Asset, AssetKind, AssetMetrics, AssetSource, SourceError};
+    use crate::{Asset, AssetKind, AssetMetrics, AssetSource, PackInfo, SourceError};
 
     fn asset(path: &str, tags: &[&str]) -> Asset {
         let mut asset = Asset::from_path(AssetPath::new(path).unwrap()).unwrap();
@@ -285,5 +298,32 @@ mod tests {
         let catalog = Catalog::from_sources(&[&pack, &notes]).unwrap();
         let wall = catalog.get(path).unwrap();
         assert_eq!(wall.tags.len(), 2);
+    }
+
+    struct PackSource(PackInfo);
+
+    impl AssetSource for PackSource {
+        fn assets(&self) -> Result<Vec<Asset>, SourceError> {
+            Ok(Vec::new())
+        }
+
+        fn packs(&self) -> Result<Vec<PackInfo>, SourceError> {
+            Ok(vec![self.0.clone()])
+        }
+    }
+
+    #[test]
+    fn remembers_what_packs_say_of_themselves() {
+        let grimdorx = PackInfo {
+            id: "LOREGD01".to_owned(),
+            name: "LORE Grimdorx A 3.09".to_owned(),
+            version: "3.9".to_owned(),
+            author: "LORE".to_owned(),
+            keywords: String::new(),
+        };
+        let source = PackSource(grimdorx.clone());
+        let notes = FixedSource(Vec::new());
+        let catalog = Catalog::from_sources(&[&source, &notes]).unwrap();
+        assert_eq!(catalog.packs().collect::<Vec<_>>(), [&grimdorx]);
     }
 }

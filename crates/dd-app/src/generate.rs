@@ -8,6 +8,8 @@ use crate::{AppError, DoorRequest, RoomRequest, Shape, WallRequest, Workspace};
 
 /// Narrowest room when none is asked for, in cells: 15 feet.
 pub const DEFAULT_MIN_ROOM: u32 = 3;
+/// Free cells around the building when none are asked for.
+pub const DEFAULT_MARGIN: u32 = 1;
 
 /// The kinds of building a generator draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,11 +26,13 @@ pub enum Generator {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LayoutRequest {
     pub generator: Generator,
-    /// Map size, in cells; the building leaves a one-cell margin.
+    /// Map size, in cells.
     pub width: u32,
     pub height: u32,
     /// Narrowest room, in cells.
     pub min_room: u32,
+    /// Free cells around the building: room for engines, a yard...
+    pub margin: u32,
     /// The same seed draws the same building.
     pub seed: u64,
     /// Asset path of the floor tileset.
@@ -53,22 +57,30 @@ pub struct LayoutReport {
 
 impl Generator {
     /// The smallest map, in cells, it draws a building with rooms in.
-    const fn smallest_map(self) -> (u32, u32) {
-        match self {
-            Self::Bsp => (3, 3),
-            Self::HabBlock | Self::ShipDeck => (8, 6),
-        }
+    const fn smallest_map(self, margin: u32) -> (u32, u32) {
+        let (width, height) = match self {
+            Self::Bsp => (1, 1),
+            Self::HabBlock | Self::ShipDeck => (6, 4),
+        };
+        (width + 2 * margin, height + 2 * margin)
     }
 }
 
 impl LayoutRequest {
     fn layout(&self) -> Layout {
-        let (width, height, min_room, seed) = (self.width, self.height, self.min_room, self.seed);
+        let (width, height, min_room, margin, seed) = (
+            self.width,
+            self.height,
+            self.min_room,
+            self.margin,
+            self.seed,
+        );
         match self.generator {
             Generator::Bsp => bsp(BspParams {
                 width,
                 height,
                 min_room,
+                margin,
                 seed,
             }),
             Generator::HabBlock | Generator::ShipDeck => {
@@ -76,6 +88,7 @@ impl LayoutRequest {
                     width,
                     height,
                     min_room,
+                    margin,
                     seed,
                 };
                 if self.generator == Generator::HabBlock {
@@ -89,7 +102,7 @@ impl LayoutRequest {
 
     /// Fails unless the map is large enough and the assets are of the right kinds.
     fn check(&self, catalog: &Catalog) -> Result<(), AppError> {
-        let (width, height) = self.generator.smallest_map();
+        let (width, height) = self.generator.smallest_map(self.margin);
         if self.width < width || self.height < height {
             return Err(AppError::MapTooSmall { width, height });
         }
@@ -170,6 +183,8 @@ impl Workspace {
 #[cfg(test)]
 mod tests {
     use super::{Generator, LayoutRequest};
+    use dd_domain::RoomId;
+
     use crate::AppError;
     use crate::assets::tests::{CRATE, DOOR, FLOOR, WALL};
     use crate::workspace::tests::workspace;
@@ -180,6 +195,7 @@ mod tests {
             width: 30,
             height: 14,
             min_room: 3,
+            margin: 1,
             seed: 42,
             floor: FLOOR.to_owned(),
             wall: WALL.to_owned(),
@@ -234,6 +250,31 @@ mod tests {
             Err(AppError::MapTooSmall {
                 width: 8,
                 height: 6
+            })
+        );
+    }
+
+    #[test]
+    fn margins_leave_room_around_the_building() {
+        let (mut workspace, _) = workspace();
+        let roomy = LayoutRequest {
+            margin: 3,
+            ..request(Generator::ShipDeck)
+        };
+        let report = workspace.generate(&roomy).unwrap();
+        let (_, map) = workspace.map(&report.map).unwrap();
+        let outline = map.room(RoomId(0)).unwrap().outline();
+        let xs = outline.vertices().iter().map(|vertex| vertex.x);
+        assert_eq!((xs.clone().min(), xs.max()), (Some(3), Some(27)));
+        let too_wide = LayoutRequest {
+            margin: 6,
+            ..request(Generator::HabBlock)
+        };
+        assert_eq!(
+            workspace.generate(&too_wide),
+            Err(AppError::MapTooSmall {
+                width: 18,
+                height: 16
             })
         );
     }

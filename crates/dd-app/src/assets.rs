@@ -90,7 +90,7 @@ fn suggestions(catalog: &Catalog, path: &str, kind: AssetKind) -> Vec<String> {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use dd_catalog::{Asset, AssetKind, AssetMetrics, Catalog, CellSize};
+    use dd_catalog::{Asset, AssetKind, AssetMetrics, Catalog, CellSize, PackInfo};
     use dd_domain::AssetPath;
 
     use super::{asset_line, resolve};
@@ -105,6 +105,10 @@ pub(crate) mod tests {
     pub const CRATE: &str = "res://packs/LOREGD01/textures/objects/[LORE] Containers/Container_Large_Metal_Crate_Green.webp";
 
     /// A catalog with one asset of each kind the use cases need.
+    pub const VOID: &str = "res://textures/terrain/terrain_void.png";
+    pub const CAN: &str =
+        "res://packs/LOREGD01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp";
+
     pub fn small_catalog() -> Catalog {
         let mut catalog = Catalog::default();
         for (path, metrics) in [
@@ -112,6 +116,17 @@ pub(crate) mod tests {
             (WALL, AssetMetrics::default()),
             (LIGHT, AssetMetrics::default()),
             (GRATE, AssetMetrics::default()),
+            (VOID, AssetMetrics::default()),
+            (
+                CAN,
+                AssetMetrics {
+                    size: Some(CellSize {
+                        width: 0.2,
+                        height: 0.3,
+                    }),
+                    ..AssetMetrics::default()
+                },
+            ),
             (
                 DOOR,
                 AssetMetrics {
@@ -134,6 +149,13 @@ pub(crate) mod tests {
             asset.metrics = metrics;
             catalog.add(asset);
         }
+        catalog.add_pack(PackInfo {
+            id: "LOREGD01".to_owned(),
+            name: "LORE Grimdorx A 3.09".to_owned(),
+            version: "3.9".to_owned(),
+            author: "LORE".to_owned(),
+            keywords: String::new(),
+        });
         catalog
     }
 

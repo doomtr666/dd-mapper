@@ -45,7 +45,7 @@ fn misplaced_props(map: &Map) -> Vec<String> {
         .collect()
 }
 
-fn crosses_walls(room: &Room, prop: &Prop) -> bool {
+pub(crate) fn crosses_walls(room: &Room, prop: &Prop) -> bool {
     let (top_left, bottom_right) = prop.bounds();
     let in_pillar = room
         .pillars()
@@ -61,7 +61,11 @@ fn crosses_walls(room: &Room, prop: &Prop) -> bool {
 /// Whether `segment` runs through the open inside of a box. The segment is
 /// clipped to the closed box (Liang-Barsky); a wall merely running along a side
 /// leaves the middle of the clipped part on that side.
-fn crosses_box(segment: Segment, top_left: CellPosition, bottom_right: CellPosition) -> bool {
+pub(crate) fn crosses_box(
+    segment: Segment,
+    top_left: CellPosition,
+    bottom_right: CellPosition,
+) -> bool {
     let start = segment.point_at(0.0);
     let end = segment.point_at(1.0);
     let (dx, dy) = (end.x - start.x, end.y - start.y);
@@ -113,7 +117,7 @@ fn overlapping_props(map: &Map) -> Vec<String> {
     warnings
 }
 
-fn boxes_overlap(
+pub(crate) fn boxes_overlap(
     (first_min, first_max): (CellPosition, CellPosition),
     (second_min, second_max): (CellPosition, CellPosition),
 ) -> bool {

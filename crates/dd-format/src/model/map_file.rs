@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use super::{Level, NodeId};
+use super::{Header, Level, NodeId};
 use crate::json::to_godot_json;
 use crate::{FormatError, Preserved};
 
@@ -13,6 +13,8 @@ pub struct MapFile {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct MapRoot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    header: Option<Preserved<Header>>,
     world: Preserved<World>,
 }
 
@@ -44,6 +46,16 @@ impl MapFile {
     pub fn to_text(&self) -> Result<String, FormatError> {
         let document = serde_json::to_value(&self.root)?;
         Ok(to_godot_json(&document) + "\n")
+    }
+
+    /// The header, absent from hand-made files.
+    #[must_use]
+    pub fn header(&self) -> Option<&Header> {
+        self.root.header.as_deref()
+    }
+
+    pub fn header_mut(&mut self) -> Option<&mut Header> {
+        self.root.header.as_deref_mut()
     }
 
     #[must_use]

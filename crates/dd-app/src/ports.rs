@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use dd_catalog::PackInfo;
 use dd_domain::Map;
 use thiserror::Error;
 
@@ -19,6 +20,15 @@ pub struct OpenedMap {
     pub warnings: Vec<String>,
 }
 
+/// What the catalog knows that a saved file needs.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SaveFacts {
+    /// Door and window radii, in editor pixels, by asset path.
+    pub portal_radii: HashMap<String, f64>,
+    /// Every pack whose `pack.json` was read, to declare the ones the map uses.
+    pub packs: Vec<PackInfo>,
+}
+
 /// Reads and writes maps in the editor's file format.
 pub trait MapFiles: Send + Sync {
     /// # Errors
@@ -33,7 +43,7 @@ pub trait MapFiles: Send + Sync {
     fn save(
         &self,
         map: &Map,
-        portal_radii: &HashMap<String, f64>,
+        facts: &SaveFacts,
         template: Option<&Path>,
         destination: &Path,
     ) -> Result<(), PortError>;

@@ -71,6 +71,12 @@ pub fn parse_map(text: &str) -> Result<u32, AppError> {
     parse_prefixed(text, "map-", "map")
 }
 
+/// # Errors
+/// Fails unless `text` reads `P<number>`.
+pub fn parse_prop(text: &str) -> Result<PropId, AppError> {
+    parse_prefixed(text, "P", "prop").map(PropId)
+}
+
 fn parse_prefixed(text: &str, prefix: &str, kind: &'static str) -> Result<u32, AppError> {
     text.trim()
         .strip_prefix(prefix)

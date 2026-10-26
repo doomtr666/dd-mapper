@@ -3,9 +3,11 @@
 mod asset;
 mod catalog;
 mod kind;
+mod pack;
 mod source;
 
 pub use asset::{Anchor, Asset, AssetMetrics, CellSize, DEFAULT_PACK};
 pub use catalog::{AssetQuery, Catalog};
 pub use kind::AssetKind;
+pub use pack::PackInfo;
 pub use source::{AssetSource, SourceError};

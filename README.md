@@ -104,8 +104,12 @@ Then restart Claude Desktop.
 | `wall_add` | adds a free-standing wall, such as a partition |
 | `door_add` | puts a door on a room (`R0`) or a wall (`W0`), at the wall point nearest to a position |
 | `prop_place` | places an object, turned by quarter turns |
+| `prop_remove` | removes a prop, for instance to place it again turned another way |
+| `prop_scatter` | strews small props at random over an area, inside rooms, clear of walls, doorways and other props |
 | `light_add` | adds a light, with range, intensity and color |
+| `floor_paint` | repaints the floor of an area, such as one room, with another tileset |
 | `pattern_add` | paints a floor pattern: grates, hazard stripes... |
+| `map_background` | covers the whole ground with a terrain texture, such as `terrain_void` for space |
 | `map_describe` | describes the map in text, with the ids shown on previews |
 | `map_preview` | draws a schematic PNG of the map |
 | `map_validate` | lists likely mistakes: rooms without doors, props across walls... |
@@ -138,7 +142,8 @@ dd-mapper generate crates/dd-cli/tests/data/hab_block.toml --out hab.dungeondraf
 ### Plans
 
 A plan is a TOML file. It starts from either a blank `[map]` or a `[generate]`d building,
-then adds elements in this order: rooms, walls, doors, patterns, props and lights. Ids
+then adds elements in this order: rooms, walls, doors, repainted floors, patterns, props, scattered clutter
+and lights. Ids
 follow that order (`R0`, `W0`, `D0`...). A generated building already holds `R0` and
 walls `W0`, `W1`... An element that cannot be added stops the build with its table name
 and position, such as `[[door]] 2: ...`.
@@ -148,6 +153,7 @@ and position, such as `[[door]] 2: ...`.
 floor = "res://packs/LOREGD01/textures/tilesets/simple/Tileset_RT_Punched_Floor.webp"
 wall = "res://packs/LOREGD01/textures/walls/Wall_Underhive_Industrial.webp"
 door = "res://packs/LOREGD01/textures/portals/Door_Underhive_Industrial.webp"
+background = "res://textures/terrain/terrain_void.png"   # the ground around rooms
 
 [map]                        # a blank map...
 width = 30
@@ -158,6 +164,7 @@ height = 20
 # width = 30
 # height = 14
 # seed = 7                   # the same seed draws the same building
+# margin = 1                 # free cells around the building, such as room for engines
 # min_room = 3               # narrowest room, in cells
 
 [[room]]
@@ -172,6 +179,10 @@ points = [[6, 1], [6, 9]]
 on = "W0"                    # a room (R0) or a wall (W0)
 at = [6, 2.5]                # snapped to the nearest point of its walls
 
+[[floor]]                    # another tileset for part of the floor
+shape = { type = "rectangle", x = 7, y = 1, width = 6, height = 8 }
+tileset = "res://packs/LORESP01/textures/tilesets/simple/Floor_SpaceShip_Grate_Worn.webp"
+
 [[pattern]]
 asset = "res://packs/LOREGD01/textures/patterns/normal/Artifcial/Tileset_AncientGothic_Quarters_Sewer_Open.webp"
 shape = { type = "polygon", points = [[8, 2], [10, 2], [10, 4]] }
@@ -181,6 +192,12 @@ shape = { type = "polygon", points = [[8, 2], [10, 2], [10, 4]] }
 asset = "res://packs/LOREGD01/textures/objects/[LORE] Containers/Container_Large_Metal_Crate_Green.webp"
 at = [3, 3]                  # center, in cells
 rotation = 90                # 0, 90, 180 or 270
+
+[[scatter]]                  # clutter strewn at random inside rooms
+assets = ["res://packs/LOREAP01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp"]
+shape = { type = "rectangle", x = 1, y = 1, width = 12, height = 8 }
+count = 15
+seed = 3
 
 [[light]]
 asset = "res://packs/LOREGD01/textures/lights/Effect_Caged_Light_Cast.webp"

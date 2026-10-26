@@ -7,6 +7,7 @@ mod ground;
 mod lights;
 mod node_ids;
 mod objects;
+mod packs;
 mod patterns;
 mod pixels;
 mod portal;
@@ -25,6 +26,7 @@ use self::ground::{blank_cave, blank_terrain};
 use self::lights::build_light;
 use self::node_ids::NodeIdAllocator;
 use self::objects::build_object;
+use self::packs::declare_packs;
 use self::patterns::build_pattern;
 use self::portal::{PortalSpec, build_portal};
 use self::shapes::build_shapes;
@@ -44,6 +46,17 @@ pub struct ExportSettings {
     /// Portal radius in pixels, by asset path.
     pub portal_radii: HashMap<String, f64>,
     pub default_portal_radius: f64,
+    /// What `pack.json` says of each known pack, by pack id.
+    pub packs: HashMap<String, PackManifest>,
+}
+
+/// A pack as its `pack.json` describes it, to declare it in the map header.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PackManifest {
+    pub name: String,
+    pub version: String,
+    pub author: String,
+    pub keywords: String,
 }
 
 impl Default for ExportSettings {
@@ -51,6 +64,7 @@ impl Default for ExportSettings {
         Self {
             portal_radii: HashMap::new(),
             default_portal_radius: DEFAULT_PORTAL_RADIUS,
+            packs: HashMap::new(),
         }
     }
 }
@@ -116,6 +130,12 @@ pub fn export_map(
     if resized {
         reset_ground(level, map.grid());
     }
+    if let Some(background) = map.background() {
+        cover_terrain(level, map.grid(), background);
+    }
+    if let Some(header) = file.header_mut() {
+        declare_packs(header, map, settings);
+    }
     Ok(file)
 }
 
@@ -139,6 +159,13 @@ fn reset_ground(level: &mut Level, grid: GridSize) {
     let cave = blank_cave(grid, &level.cave);
     *level.cave = cave;
     let terrain = blank_terrain(grid, &level.terrain);
+    *level.terrain = terrain;
+}
+
+/// Paints the whole terrain with `background`.
+fn cover_terrain(level: &mut Level, grid: GridSize, background: &AssetPath) {
+    let mut terrain = blank_terrain(grid, &level.terrain);
+    background.as_str().clone_into(&mut terrain.texture_1);
     *level.terrain = terrain;
 }
 
@@ -235,7 +262,7 @@ impl<'a> WallBuilder<'a> {
 mod tests {
     use dd_domain::{AssetPath, CellPoint, GridSize, Map, Polygon, Room};
 
-    use super::{ExportError, ExportSettings, export_map};
+    use super::{ExportError, ExportSettings, PackManifest, export_map};
     use crate::model::{MapFile, NodeId};
 
     fn template() -> MapFile {
@@ -301,6 +328,68 @@ mod tests {
         assert_eq!(exported.world().next_node_id, NodeId(3));
     }
 
+    fn crate_from(pack: &str) -> dd_domain::Prop {
+        dd_domain::Prop {
+            asset: AssetPath::new(format!("res://packs/{pack}/textures/objects/crate.webp"))
+                .unwrap(),
+            center: dd_domain::CellPosition::new(2.5, 0.5),
+            rotation: dd_domain::QuarterTurn::Deg0,
+            footprint: dd_domain::Footprint::new(1.0, 1.0).unwrap(),
+        }
+    }
+
+    #[test]
+    fn declares_every_pack_the_map_uses() {
+        let mut map = Map::new(GridSize::new(10, 8).unwrap());
+        map.add_prop(crate_from("LORESP01")).unwrap();
+        map.add_prop(crate_from("LOREAP01")).unwrap();
+        map.add_prop(crate_from("LOREGD01")).unwrap();
+        map.set_background(AssetPath::new("res://textures/terrain/terrain_void.png").unwrap());
+        let starpunx = PackManifest {
+            name: "LORE Starpunx A 3.16".to_owned(),
+            version: "3.16".to_owned(),
+            author: "LORE".to_owned(),
+            keywords: String::new(),
+        };
+        let settings = ExportSettings {
+            packs: [("LORESP01".to_owned(), starpunx)].into(),
+            ..ExportSettings::default()
+        };
+        let exported = export_map(&map, &template(), &settings).unwrap();
+        let header = exported.header().unwrap();
+        assert!(header.uses_default_assets);
+        let declared: Vec<(&str, &str)> = header
+            .asset_manifest
+            .iter()
+            .map(|pack| (pack.id.as_str(), pack.name.as_str()))
+            .collect();
+        assert_eq!(
+            declared,
+            [
+                ("LOREAP01", "LOREAP01"),
+                ("LOREGD01", "LORE Grimdorx A 3.09"),
+                ("LORENT01", "LORE Natural Textures A 3.03"),
+                ("LORESP01", "LORE Starpunx A 3.16"),
+            ]
+        );
+        let text = exported.to_text().unwrap();
+        assert!(
+            text.contains(
+                "\t\t\t\t\"name\": \"LORE Starpunx A 3.16\",\n\
+                 \t\t\t\t\"id\": \"LORESP01\",\n\
+                 \t\t\t\t\"version\": \"3.16\",\n\
+                 \t\t\t\t\"author\": \"LORE\",\n\
+                 \t\t\t\t\"keywords\": \"\",\n\
+                 \t\t\t\t\"allow_3rd_party_mapping_software_to_read\": false,\n\
+                 \t\t\t\t\"custom_color_overrides\": {\n\
+                 \t\t\t\t\t\"enabled\": false,\n\
+                 \t\t\t\t\t\"min_redness\": 0,"
+            ),
+            "{}",
+            &text[..3000]
+        );
+    }
+
     #[test]
     fn partitions_become_free_walls_outside_floor_shapes() {
         let mut map = Map::new(GridSize::new(10, 8).unwrap());
@@ -357,6 +446,23 @@ mod tests {
         let map = Map::new(GridSize::new(48, 27).unwrap());
         let exported = export_map(&map, &template, &ExportSettings::default()).unwrap();
         assert_eq!(exported.world().levels["0"].terrain.splat, painted);
+    }
+
+    #[test]
+    fn a_background_covers_the_whole_terrain() {
+        let mut map = Map::new(GridSize::new(48, 27).unwrap());
+        let void = "res://textures/terrain/terrain_void.png";
+        map.set_background(AssetPath::new(void).unwrap());
+        let exported = export_map(&map, &template(), &ExportSettings::default()).unwrap();
+        let terrain = &exported.world().levels["0"].terrain;
+        assert_eq!(terrain.texture_1, void);
+        assert!(
+            terrain
+                .splat
+                .0
+                .chunks(4)
+                .all(|pixel| pixel == [255, 0, 0, 0])
+        );
     }
 
     #[test]

@@ -17,6 +17,8 @@ const WALL: &str = "res://packs/LOREGD01/textures/walls/Wall_Underhive_Industria
 const DOOR: &str = "res://packs/LOREGD01/textures/portals/Door_Underhive_Industrial.webp";
 const LIGHT: &str = "res://packs/LOREGD01/textures/lights/Effect_Caged_Light_Cast.webp";
 const GRATE: &str = "res://packs/LOREGD01/textures/patterns/normal/Artifcial/Tileset_AncientGothic_Quarters_Sewer_Open.webp";
+const VOID: &str = "res://textures/terrain/terrain_void.png";
+const CAN: &str = "res://packs/LOREGD01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp";
 const CRATE: &str = "res://packs/LOREGD01/textures/objects/[LORE] Containers/Container_Large_Metal_Crate_Green.webp";
 
 #[derive(Debug, Clone, Default)]
@@ -37,6 +39,17 @@ fn catalog() -> Catalog {
         (WALL, AssetMetrics::default()),
         (LIGHT, AssetMetrics::default()),
         (GRATE, AssetMetrics::default()),
+        (VOID, AssetMetrics::default()),
+        (
+            CAN,
+            AssetMetrics {
+                size: Some(CellSize {
+                    width: 0.2,
+                    height: 0.3,
+                }),
+                ..AssetMetrics::default()
+            },
+        ),
         (
             DOOR,
             AssetMetrics {
@@ -134,8 +147,10 @@ async fn lists_the_design_tools() {
         [
             "catalog_search",
             "door_add",
+            "floor_paint",
             "layout_generate",
             "light_add",
+            "map_background",
             "map_describe",
             "map_new",
             "map_open",
@@ -144,6 +159,8 @@ async fn lists_the_design_tools() {
             "map_validate",
             "pattern_add",
             "prop_place",
+            "prop_remove",
+            "prop_scatter",
             "room_add",
             "wall_add",
         ]
@@ -259,6 +276,59 @@ async fn generates_a_building_ready_to_furnish() {
 }
 
 #[tokio::test]
+async fn dresses_a_building_with_clutter_and_a_background() {
+    let client = connect().await;
+    let building = json!({
+        "generator": "hab_block", "width": 30, "height": 14, "seed": 7,
+        "floor": FLOOR, "wall": WALL, "door": DOOR,
+    });
+    ok_text(&call(&client, "layout_generate", building).await);
+    let background = json!({"map_id": "map-1", "asset": VOID});
+    assert_eq!(
+        ok_text(&call(&client, "map_background", background).await),
+        "map-1 now lies on terrain_void."
+    );
+    let floor = json!({
+        "map_id": "map-1",
+        "shape": {"type": "rectangle", "x": 1, "y": 6, "width": 28, "height": 2},
+        "tileset": FLOOR,
+    });
+    assert_eq!(
+        ok_text(&call(&client, "floor_paint", floor).await),
+        "Painted 56 cells."
+    );
+    let scatter = json!({
+        "map_id": "map-1",
+        "assets": [CAN],
+        "shape": {"type": "rectangle", "x": 0, "y": 0, "width": 30, "height": 14},
+        "count": 12,
+        "seed": 3,
+    });
+    let strewn = ok_text(&call(&client, "prop_scatter", scatter).await);
+    assert_eq!(strewn, "Placed 12 props: P0 to P11.");
+    let removed = json!({"map_id": "map-1", "prop_id": "P3"});
+    assert_eq!(
+        ok_text(&call(&client, "prop_remove", removed).await),
+        "Removed P3."
+    );
+    let warnings = ok_text(&call(&client, "map_validate", json!({"map_id": "map-1"})).await);
+    assert_eq!(warnings, "No warning.");
+
+    let destination = std::env::temp_dir().join(format!(
+        "dd-mapper-dressed-{}.dungeondraft_map",
+        std::process::id()
+    ));
+    let save = json!({"map_id": "map-1", "path": destination.display().to_string()});
+    ok_text(&call(&client, "map_save", save).await);
+    let saved = MapFile::parse(&std::fs::read_to_string(&destination).unwrap()).unwrap();
+    std::fs::remove_file(&destination).unwrap();
+    let level = &saved.world().levels["0"];
+    assert_eq!(level.terrain.texture_1, VOID);
+    assert_eq!(level.objects.len(), 11);
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test]
 async fn searches_the_catalog() {
     let client = connect().await;
     let found = ok_text(
@@ -309,7 +379,7 @@ async fn exposes_the_catalog_summary_as_a_resource() {
         read["contents"][0]["text"]
             .as_str()
             .unwrap()
-            .starts_with("6 assets.")
+            .starts_with("8 assets.")
     );
     client.cancel().await.unwrap();
 }

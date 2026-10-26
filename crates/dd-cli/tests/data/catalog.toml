@@ -19,3 +19,10 @@ path = "res://packs/LOREGD01/textures/lights/Effect_Caged_Light_Cast.webp"
 
 [[asset]]
 path = "res://packs/LOREGD01/textures/patterns/normal/Artifcial/Tileset_AncientGothic_Quarters_Sewer_Open.webp"
+
+[[asset]]
+path = "res://textures/terrain/terrain_void.png"
+
+[[asset]]
+path = "res://packs/LOREGD01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp"
+size = [0.2, 0.3]

@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use dd_app::{FootprintOf, MapFiles, OpenedMap, PortError, PreviewRenderer};
+use dd_app::{FootprintOf, MapFiles, OpenedMap, PortError, PreviewRenderer, SaveFacts};
 use dd_domain::Map;
 use dd_format::FormatError;
-use dd_format::export::{ExportSettings, export_map};
+use dd_format::export::{ExportSettings, PackManifest, export_map};
 use dd_format::import::import_map;
 use dd_format::model::MapFile;
 use dd_render::{PreviewOptions, render};
@@ -47,7 +47,7 @@ impl MapFiles for DungeondraftFiles {
     fn save(
         &self,
         map: &Map,
-        portal_radii: &HashMap<String, f64>,
+        facts: &SaveFacts,
         template: Option<&Path>,
         destination: &Path,
     ) -> Result<(), PortError> {
@@ -55,10 +55,7 @@ impl MapFiles for DungeondraftFiles {
             Some(origin) => read_map_file(origin)?,
             None => self.default_template.clone(),
         };
-        let settings = ExportSettings {
-            portal_radii: portal_radii.clone(),
-            ..ExportSettings::default()
-        };
+        let settings = export_settings(facts);
         let exported =
             export_map(map, &template, &settings).map_err(|error| PortError(error.to_string()))?;
         let text = exported
@@ -66,6 +63,27 @@ impl MapFiles for DungeondraftFiles {
             .map_err(|error| PortError(error.to_string()))?;
         std::fs::write(destination, text)
             .map_err(|error| PortError(format!("cannot write {}: {error}", destination.display())))
+    }
+}
+
+fn export_settings(facts: &SaveFacts) -> ExportSettings {
+    let packs: HashMap<String, PackManifest> = facts
+        .packs
+        .iter()
+        .map(|pack| {
+            let manifest = PackManifest {
+                name: pack.name.clone(),
+                version: pack.version.clone(),
+                author: pack.author.clone(),
+                keywords: pack.keywords.clone(),
+            };
+            (pack.id.clone(), manifest)
+        })
+        .collect();
+    ExportSettings {
+        portal_radii: facts.portal_radii.clone(),
+        packs,
+        ..ExportSettings::default()
     }
 }
 
@@ -87,5 +105,53 @@ impl PreviewRenderer for SchematicRenderer {
         render(map, &options)
             .and_then(|preview| preview.to_png())
             .map_err(|error| PortError(error.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use dd_app::{MapFiles, SaveFacts};
+    use dd_catalog::PackInfo;
+    use dd_domain::{AssetPath, CellPosition, Footprint, GridSize, Map, Prop, QuarterTurn};
+    use dd_format::model::MapFile;
+
+    use super::DungeondraftFiles;
+
+    #[test]
+    fn saved_maps_declare_the_packs_they_use() {
+        let mut map = Map::new(GridSize::new(10, 8).unwrap());
+        let thruster = "res://packs/LORESP01/textures/objects/[LORE] Spaceship Parts/Thruster_NPK_Main_Worn.webp";
+        map.add_prop(Prop {
+            asset: AssetPath::new(thruster).unwrap(),
+            center: CellPosition::new(3.0, 3.0),
+            rotation: QuarterTurn::Deg0,
+            footprint: Footprint::new(1.86, 2.93).unwrap(),
+        })
+        .unwrap();
+        let facts = SaveFacts {
+            packs: vec![PackInfo {
+                id: "LORESP01".to_owned(),
+                name: "LORE Starpunx A 3.16".to_owned(),
+                version: "3.16".to_owned(),
+                author: "LORE".to_owned(),
+                keywords: String::new(),
+            }],
+            ..SaveFacts::default()
+        };
+        let destination = std::env::temp_dir().join(format!(
+            "dd-setup-packs-{}.dungeondraft_map",
+            std::process::id()
+        ));
+        let files = DungeondraftFiles::with_default_template().unwrap();
+        files.save(&map, &facts, None, &destination).unwrap();
+        let saved = MapFile::parse(&std::fs::read_to_string(&destination).unwrap()).unwrap();
+        std::fs::remove_file(&destination).unwrap();
+        let header = saved.header().unwrap();
+        assert!(
+            header
+                .asset_manifest
+                .iter()
+                .any(|pack| pack.id == "LORESP01" && pack.name == "LORE Starpunx A 3.16")
+        );
     }
 }
