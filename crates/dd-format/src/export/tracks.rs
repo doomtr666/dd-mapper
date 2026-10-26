@@ -7,7 +7,9 @@ use crate::model::{NodeId, Path};
 /// Layer Dungeondraft puts new paths on ("User Layer 1").
 const DEFAULT_PATH_LAYER: i32 = 100;
 /// Dungeondraft's default curve through the points.
-const DEFAULT_SMOOTHNESS: f64 = 1.0;
+const SMOOTH: f64 = 1.0;
+/// Straight segments and sharp corners.
+const SHARP: f64 = 0.0;
 
 /// A Dungeondraft path for `track`: points relative to the first one, the
 /// last one repeated as Dungeondraft writes it.
@@ -27,7 +29,7 @@ pub fn build_path(track: &Track, node_id: NodeId) -> Path {
         rotation: 0.0,
         scale: Vector2::new(1.0, 1.0),
         edit_points: PoolVector2Array(edit_points),
-        smoothness: DEFAULT_SMOOTHNESS,
+        smoothness: if track.smooth() { SMOOTH } else { SHARP },
         texture: track.asset().as_str().to_owned(),
         width: track.width() * CELL_SIZE_PX,
         layer: DEFAULT_PATH_LAYER,
@@ -64,6 +66,21 @@ mod tests {
             .map(|path| (**path).clone())
             .unwrap();
         as_written(&path)
+    }
+
+    #[test]
+    fn sharp_tracks_are_not_smoothed() {
+        let stripes = Track::new(
+            AssetPath::new("res://textures/paths/rope_(thick).png").unwrap(),
+            vec![CellPosition::new(1.0, 1.0), CellPosition::new(4.0, 1.0)],
+            0.25,
+            true,
+        )
+        .unwrap()
+        .with_sharp_corners();
+        let path = build_path(&stripes, NodeId(1));
+        assert!(path.smoothness.abs() < f64::EPSILON);
+        assert!(path.closed_loop);
     }
 
     #[test]

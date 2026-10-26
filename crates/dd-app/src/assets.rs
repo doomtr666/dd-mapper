@@ -106,6 +106,7 @@ pub(crate) mod tests {
 
     /// A catalog with one asset of each kind the use cases need.
     pub const VOID: &str = "res://textures/terrain/terrain_void.png";
+    pub const ROLLER: &str = "res://packs/LOREAP01/textures/portals/Door_Roller_Bay.webp";
     pub const BELT: &str =
         "res://packs/LOREGD01/textures/paths/Artificial/Path_Conveyor_Belt_Large.webp";
     pub const CAN: &str =
@@ -120,6 +121,16 @@ pub(crate) mod tests {
             (GRATE, AssetMetrics::default()),
             (VOID, AssetMetrics::default()),
             (BELT, AssetMetrics::default()),
+            (
+                ROLLER,
+                AssetMetrics {
+                    size: Some(CellSize {
+                        width: 3.82,
+                        height: 0.57,
+                    }),
+                    ..AssetMetrics::default()
+                },
+            ),
             (
                 CAN,
                 AssetMetrics {

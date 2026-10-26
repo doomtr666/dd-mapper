@@ -190,8 +190,13 @@ fn track_line(id: TrackId, track: &Track) -> String {
         .map(|point| format!("({}, {})", hundredths(point.x), hundredths(point.y)))
         .collect();
     let closed = if track.closed() { ", closed" } else { "" };
+    let sharp = if track.smooth() {
+        ""
+    } else {
+        ", sharp corners"
+    };
     format!(
-        "- {}: {} through {}, {} cells wide{closed}\n",
+        "- {}: {} through {}, {} cells wide{sharp}{closed}\n",
         track_label(id),
         asset_name(track.asset()),
         points.join(" - "),

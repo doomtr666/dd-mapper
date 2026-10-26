@@ -190,6 +190,11 @@ fn import_track(importer: &mut Importer, path: &PathRecord) -> Result<(), String
     let asset = AssetPath::new(path.texture.clone()).map_err(|error| error.to_string())?;
     let track = Track::new(asset, points, path.width / CELL_SIZE_PX, path.closed_loop)
         .map_err(|error| error.to_string())?;
+    let track = if path.smoothness > 0.5 {
+        track
+    } else {
+        track.with_sharp_corners()
+    };
     importer
         .map
         .add_track(track)

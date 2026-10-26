@@ -70,6 +70,7 @@
 //! points = [[2.5, 7], [12, 7], [12, 3.5]]   # cells, anywhere, even off the map
 //! width = 1.5                  # cells, 1 by default
 //! closed = false
+//! sharp = false                # true: straight segments, for stripes, fences, pipes
 //!
 //! [[scatter]]                  # clutter strewn at random inside rooms
 //! assets = ["res://packs/.../Debris_Can_Empty.webp"]
@@ -298,6 +299,8 @@ struct PathPlan {
     width: Option<f64>,
     #[serde(default)]
     closed: bool,
+    #[serde(default)]
+    sharp: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -608,6 +611,7 @@ impl PathPlan {
             points: self.points.iter().map(|&[x, y]| (x, y)).collect(),
             width: self.width,
             closed: self.closed,
+            sharp: self.sharp,
         }
     }
 }

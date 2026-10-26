@@ -178,6 +178,11 @@ impl Workspace {
             .collect();
         let width = request.width.unwrap_or(DEFAULT_PATH_WIDTH);
         let track = Track::new(asset, points, width, request.closed)?;
+        let track = if request.sharp {
+            track.with_sharp_corners()
+        } else {
+            track
+        };
         let id = self.map_mut(map)?.add_track(track)?;
         Ok(track_label(id))
     }
@@ -407,7 +412,7 @@ impl Workspace {
         portals
             .into_iter()
             .filter_map(|asset| {
-                let radius = asset.metrics.portal_radius?;
+                let radius = portal_radius(asset)?;
                 Some((asset.path.as_str().to_owned(), radius))
             })
             .collect()
@@ -425,12 +430,18 @@ pub(crate) fn footprint(asset: &Asset) -> Result<Footprint, AppError> {
 
 /// Half the width of a door, in cells.
 fn door_half_width(asset: &Asset) -> f64 {
-    asset
-        .metrics
-        .portal_radius
-        .map_or(DEFAULT_DOOR_HALF_WIDTH, |radius| {
-            radius / EDITOR_PIXELS_PER_CELL
-        })
+    portal_radius(asset).map_or(DEFAULT_DOOR_HALF_WIDTH, |radius| {
+        radius / EDITOR_PIXELS_PER_CELL
+    })
+}
+
+/// Half the width of a door in editor pixels: as saved maps tell, or half its
+/// image's width, which is what Dungeondraft uses.
+fn portal_radius(asset: &Asset) -> Option<f64> {
+    asset.metrics.portal_radius.or_else(|| {
+        let size = asset.metrics.size?;
+        Some(size.width * EDITOR_PIXELS_PER_CELL / 2.0)
+    })
 }
 
 /// The walls of a room or of a free-standing wall.
@@ -480,7 +491,9 @@ pub(crate) mod tests {
     use dd_domain::{Map, PropError};
 
     use super::{RoomReport, Workspace};
-    use crate::assets::tests::{BELT, CRATE, DOOR, FLOOR, GRATE, LIGHT, VOID, WALL, small_catalog};
+    use crate::assets::tests::{
+        BELT, CRATE, DOOR, FLOOR, GRATE, LIGHT, ROLLER, VOID, WALL, small_catalog,
+    };
     use crate::{
         AppError, DoorRequest, FloorRequest, FootprintOf, LightRequest, MapFiles, OpenedMap,
         PathRequest, PatternRequest, PortError, PreviewRenderer, PropRequest, RoomRequest,
@@ -611,9 +624,9 @@ pub(crate) mod tests {
         let (workspace, _) = workspace();
         assert_eq!(
             workspace.catalog_summary(),
-            "9 assets.\n\
-             By pack: LOREGD01 (8), default (1).\n\
-             By kind: tilesets (1), walls (1), portals (1), objects (2), lights (1), patterns (1), \
+            "10 assets.\n\
+             By pack: LOREAP01 (1), LOREGD01 (8), default (1).\n\
+             By kind: tilesets (1), walls (1), portals (2), objects (2), lights (1), patterns (1), \
              terrain (1), paths (1).\n"
         );
     }
@@ -823,8 +836,20 @@ pub(crate) mod tests {
             points: vec![(1.0, 2.0), (6.5, 2.0), (6.5, 5.0)],
             width: Some(1.5),
             closed: false,
+            sharp: false,
         };
         assert_eq!(workspace.add_path(&map, &belt), Ok("T0".to_owned()));
+        let stripes = PathRequest {
+            sharp: true,
+            ..belt.clone()
+        };
+        workspace.add_path(&map, &stripes).unwrap();
+        assert!(
+            workspace
+                .describe(&map)
+                .unwrap()
+                .contains("1.5 cells wide, sharp corners")
+        );
         let description = workspace.describe(&map).unwrap();
         assert!(
             description.contains(
@@ -1008,6 +1033,26 @@ pub(crate) mod tests {
         assert_eq!(facts.packs[0].name, "LORE Grimdorx A 3.09");
         assert_eq!(*template, None);
         assert_eq!(*rooms, 1);
+    }
+
+    #[test]
+    fn doors_without_a_known_radius_take_half_their_width() {
+        let (mut workspace, exports) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        workspace
+            .add_room(&map, &room(rectangle(0, 0, 10, 6)))
+            .unwrap();
+        let roller = DoorRequest {
+            asset: ROLLER.to_owned(),
+            ..door_at("R0", 5.0, 6.0)
+        };
+        workspace.add_door(&map, &roller).unwrap();
+        workspace
+            .save(&map, Path::new("out/garage.dungeondraft_map"))
+            .unwrap();
+        let exports = exports.lock().unwrap();
+        let radius = exports[0].1.portal_radii[ROLLER];
+        assert!((radius - 3.82 * 128.0).abs() < 1e-9, "{radius}");
     }
 
     #[test]

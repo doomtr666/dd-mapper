@@ -10,6 +10,9 @@ pub struct Track {
     points: Vec<CellPosition>,
     width: f64,
     closed: bool,
+    /// Curved through its points, as Dungeondraft draws paths by default;
+    /// sharp corners suit man-made lines such as hazard stripes.
+    smooth: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Error)]
@@ -42,7 +45,22 @@ impl Track {
             points,
             width,
             closed,
+            smooth: true,
         })
+    }
+
+    /// The same track with straight segments and sharp corners.
+    #[must_use]
+    pub fn with_sharp_corners(self) -> Self {
+        Self {
+            smooth: false,
+            ..self
+        }
+    }
+
+    #[must_use]
+    pub fn smooth(&self) -> bool {
+        self.smooth
     }
 
     #[must_use]
@@ -91,6 +109,13 @@ mod tests {
         assert_eq!(track.points(), points(&[(1.0, 2.0), (6.5, 2.0)]));
         assert!((track.width() - 1.5).abs() < f64::EPSILON);
         assert!(!track.closed());
+    }
+
+    #[test]
+    fn curves_unless_asked_for_sharp_corners() {
+        let track = Track::new(belt(), points(&[(1.0, 2.0), (6.5, 2.0)]), 1.5, false).unwrap();
+        assert!(track.smooth());
+        assert!(!track.with_sharp_corners().smooth());
     }
 
     #[test]

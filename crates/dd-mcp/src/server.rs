@@ -19,7 +19,10 @@ use rmcp::model::{
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, tool, tool_handler, tool_router};
 
-use crate::guidance::{DESIGN_PROMPT_DESCRIPTION, DESIGN_PROMPT_NAME, INSTRUCTIONS, design_prompt};
+use crate::guidance::{
+    GENERAL_PROMPT_DESCRIPTION, GENERAL_PROMPT_NAME, INSTRUCTIONS, WARHAMMER_PROMPT_DESCRIPTION,
+    WARHAMMER_PROMPT_NAME, general_prompt, warhammer_prompt,
+};
 use crate::params::{
     CatalogSearchParams, CaveCarveParams, CaveEntranceParams, CaveGenerateParams,
     DEFAULT_PIXELS_PER_CELL, DoorAddParams, FloorPaintParams, LayoutGenerateParams, LightAddParams,
@@ -32,6 +35,8 @@ const SERVER_NAME: &str = "dd-mapper";
 const CATALOG_SUMMARY_URI: &str = "catalog://summary";
 const BRIEF_ARGUMENT: &str = "brief";
 const DEFAULT_BRIEF: &str = "a location of your choice";
+const SETTING_ARGUMENT: &str = "setting";
+const DEFAULT_SETTING: &str = "fantasy";
 
 /// Serves the design tools of one session; clones share the same maps.
 #[derive(Clone)]
@@ -367,16 +372,28 @@ impl ServerHandler for DdMapperServer {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListPromptsResult, ErrorData> {
-        let brief = PromptArgument::new(BRIEF_ARGUMENT)
-            .with_description("The location to design, in a sentence.")
+        let brief = || {
+            PromptArgument::new(BRIEF_ARGUMENT)
+                .with_description("The location to design, in a sentence.")
+                .with_required(false)
+        };
+        let setting = PromptArgument::new(SETTING_ARGUMENT)
+            .with_description(
+                "The world it belongs to: medieval fantasy, cyberpunk, gothic horror...",
+            )
             .with_required(false);
-        let prompt = Prompt::new(
-            DESIGN_PROMPT_NAME,
-            Some(DESIGN_PROMPT_DESCRIPTION),
-            Some(vec![brief]),
+        let general = Prompt::new(
+            GENERAL_PROMPT_NAME,
+            Some(GENERAL_PROMPT_DESCRIPTION),
+            Some(vec![brief(), setting]),
+        );
+        let warhammer = Prompt::new(
+            WARHAMMER_PROMPT_NAME,
+            Some(WARHAMMER_PROMPT_DESCRIPTION),
+            Some(vec![brief()]),
         );
         Ok(ListPromptsResult {
-            prompts: vec![prompt],
+            prompts: vec![general, warhammer],
             ..ListPromptsResult::default()
         })
     }
@@ -386,20 +403,32 @@ impl ServerHandler for DdMapperServer {
         request: GetPromptRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<GetPromptResponse, ErrorData> {
-        if request.name != DESIGN_PROMPT_NAME {
-            let message = format!("no prompt {}; try {DESIGN_PROMPT_NAME}", request.name);
-            return Err(ErrorData::invalid_params(message, None));
-        }
-        let brief = request
-            .arguments
-            .as_ref()
-            .and_then(|arguments| arguments.get(BRIEF_ARGUMENT))
-            .and_then(|brief| brief.as_str())
-            .unwrap_or(DEFAULT_BRIEF)
-            .to_owned();
-        let message = PromptMessage::new_text(Role::User, design_prompt(&brief));
+        let argument = |name: &str, default: &str| {
+            request
+                .arguments
+                .as_ref()
+                .and_then(|arguments| arguments.get(name))
+                .and_then(|value| value.as_str())
+                .unwrap_or(default)
+                .to_owned()
+        };
+        let brief = argument(BRIEF_ARGUMENT, DEFAULT_BRIEF);
+        let (text, description) = match request.name.as_str() {
+            GENERAL_PROMPT_NAME => (
+                general_prompt(&brief, &argument(SETTING_ARGUMENT, DEFAULT_SETTING)),
+                GENERAL_PROMPT_DESCRIPTION,
+            ),
+            WARHAMMER_PROMPT_NAME => (warhammer_prompt(&brief), WARHAMMER_PROMPT_DESCRIPTION),
+            other => {
+                let message = format!(
+                    "no prompt {other}; try {GENERAL_PROMPT_NAME} or {WARHAMMER_PROMPT_NAME}"
+                );
+                return Err(ErrorData::invalid_params(message, None));
+            }
+        };
+        let message = PromptMessage::new_text(Role::User, text);
         Ok(GetPromptResult::new(vec![message])
-            .with_description(DESIGN_PROMPT_DESCRIPTION)
+            .with_description(description)
             .into())
     }
 }

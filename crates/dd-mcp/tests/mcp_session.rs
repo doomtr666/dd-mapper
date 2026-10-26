@@ -465,28 +465,49 @@ async fn exposes_the_catalog_summary_as_a_resource() {
 }
 
 #[tokio::test]
-async fn offers_a_design_prompt() {
+async fn offers_design_prompts_for_any_setting_and_for_40k() {
     let client = connect().await;
     let prompts = client.list_all_prompts().await.unwrap();
-    assert_eq!(prompts[0].name, "design_40k_location");
-    let params = serde_json::from_value(json!({
-        "name": "design_40k_location",
-        "arguments": {"brief": "an underhive smuggler den"}
-    }))
-    .unwrap();
-    let prompt = serde_json::to_value(client.get_prompt(params).await.unwrap()).unwrap();
-    let guidance = prompt["messages"][0]["content"]["text"].as_str().unwrap();
+    let names: Vec<&str> = prompts.iter().map(|prompt| prompt.name.as_ref()).collect();
+    assert_eq!(names, ["design_location", "design_40k_location"]);
+    let text = |name: &str, arguments: Value| {
+        let params = serde_json::from_value(json!({"name": name, "arguments": arguments})).unwrap();
+        let client = &client;
+        async move {
+            let prompt = serde_json::to_value(client.get_prompt(params).await.unwrap()).unwrap();
+            prompt["messages"][0]["content"]["text"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        }
+    };
+    let general = text(
+        "design_location",
+        json!({"brief": "a smugglers' cove", "setting": "medieval fantasy"}),
+    )
+    .await;
     for step in [
-        "an underhive smuggler den",
+        "a smugglers' cove",
+        "medieval fantasy",
         "catalog_search",
         "kind portal",
         "wall_add",
         "light_add",
-        "pattern_add",
+        "prop_scatter",
         "map_preview",
         "map_save",
     ] {
-        assert!(guidance.contains(step), "{step} missing from {guidance}");
+        assert!(general.contains(step), "{step} missing from {general}");
+    }
+    assert!(!general.contains("Grimdorx"), "{general}");
+    let warhammer = text("design_40k_location", json!({"brief": "an underhive den"})).await;
+    for step in [
+        "an underhive den",
+        "Imperium Maledictum",
+        "Grimdorx",
+        "prop_scatter",
+    ] {
+        assert!(warhammer.contains(step), "{step} missing from {warhammer}");
     }
     client.cancel().await.unwrap();
 }

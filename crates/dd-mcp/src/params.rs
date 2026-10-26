@@ -446,6 +446,10 @@ pub struct PathAddParams {
     /// Back to the first point, such as a conveyor loop.
     #[serde(default)]
     pub closed: bool,
+    /// Straight segments and sharp corners: hazard stripes, fences, pipes along
+    /// walls. Paths curve through their points otherwise, like cables.
+    #[serde(default)]
+    pub sharp: bool,
 }
 
 impl PathAddParams {
@@ -455,6 +459,7 @@ impl PathAddParams {
             points: self.points.into_iter().map(|[x, y]| (x, y)).collect(),
             width: self.width,
             closed: self.closed,
+            sharp: self.sharp,
         };
         (self.map_id, request)
     }

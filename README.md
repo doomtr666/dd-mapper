@@ -120,8 +120,13 @@ Then restart Claude Desktop.
 | `map_validate` | lists likely mistakes: rooms without doors, props across walls... |
 | `map_save` | writes the `.dungeondraft_map` file |
 
-The `catalog://summary` resource counts assets by pack and kind. The `design_40k_location`
-prompt walks the model through designing a location, from the plan to the saved file.
+The `catalog://summary` resource counts assets by pack and kind. Two prompts walk the model
+through designing a location, from the plan to the saved file:
+
+- `design_location` works in any setting, given as an argument (medieval fantasy,
+  cyberpunk...);
+- `design_40k_location` adds the rules of the Warhammer 40,000 universe, for Imperium
+  Maledictum: Grimdorx props first, nothing modern or post-apocalyptic.
 
 ## Command line
 
@@ -222,6 +227,7 @@ asset = "res://packs/LOREGD01/textures/paths/Artificial/Path_Conveyor_Belt_Large
 points = [[2.5, 7], [12, 7], [12, 3.5]]   # cells, anywhere, even off the map's edges
 width = 1.5                  # cells, 1 by default
 closed = false
+sharp = false                # true: straight segments, for stripes, fences, pipes
 
 [[scatter]]                  # clutter strewn at random inside rooms
 assets = ["res://packs/LOREAP01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp"]

@@ -52,6 +52,9 @@ pub struct PathRequest {
     pub width: Option<f64>,
     /// Back to the first point, such as a conveyor loop.
     pub closed: bool,
+    /// Straight segments and sharp corners, for hazard stripes, fences and
+    /// pipes; paths curve through their points otherwise.
+    pub sharp: bool,
 }
 
 /// A floor tileset painted over an area, such as one room of a building.
