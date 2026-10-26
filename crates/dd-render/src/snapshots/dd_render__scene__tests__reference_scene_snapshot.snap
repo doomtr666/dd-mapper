@@ -1,0 +1,5 @@
+---
+source: crates/dd-render/src/scene.rs
+expression: "format!(\"{} x {} px, rgba fnv1a {hash:016x}\", preview.width(),\npreview.height())"
+---
+320 x 256 px, rgba fnv1a 4a2f969de8d10ee9

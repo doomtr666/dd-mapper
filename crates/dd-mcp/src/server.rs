@@ -1,0 +1,352 @@
+//! The MCP server: tools, resources and prompts over a [`Workspace`].
+
+use std::path::Path;
+use std::sync::{Arc, Mutex, PoisonError};
+
+use base64::Engine as _;
+use dd_app::{AppError, LayoutReport, LayoutRequest, OpenReport, RoomReport, Workspace};
+use dd_catalog::AssetQuery;
+use rmcp::handler::server::router::tool::ToolRouter;
+use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::{
+    CallToolResult, ContentBlock, GetPromptRequestParams, GetPromptResponse, GetPromptResult,
+    Implementation, ListPromptsResult, ListResourcesResult, PaginatedRequestParams, Prompt,
+    PromptArgument, PromptMessage, ReadResourceRequestParams, ReadResourceResponse,
+    ReadResourceResult, Resource, ResourceContents, Role, ServerCapabilities, ServerConfig,
+};
+use rmcp::service::RequestContext;
+use rmcp::{ErrorData, RoleServer, ServerHandler, tool, tool_handler, tool_router};
+
+use crate::guidance::{DESIGN_PROMPT_DESCRIPTION, DESIGN_PROMPT_NAME, INSTRUCTIONS, design_prompt};
+use crate::params::{
+    CatalogSearchParams, DEFAULT_PIXELS_PER_CELL, DoorAddParams, LayoutGenerateParams,
+    LightAddParams, MapIdParams, MapNewParams, MapOpenParams, MapPreviewParams, MapSaveParams,
+    PatternAddParams, PropPlaceParams, RoomAddParams, WallAddParams,
+};
+
+const SERVER_NAME: &str = "dd-mapper";
+const CATALOG_SUMMARY_URI: &str = "catalog://summary";
+const BRIEF_ARGUMENT: &str = "brief";
+const DEFAULT_BRIEF: &str = "a location of your choice";
+
+/// Serves the design tools of one session; clones share the same maps.
+#[derive(Clone)]
+pub struct DdMapperServer {
+    workspace: Arc<Mutex<Workspace>>,
+    tool_router: ToolRouter<Self>,
+}
+
+impl DdMapperServer {
+    #[must_use]
+    pub fn new(workspace: Workspace) -> Self {
+        Self {
+            workspace: Arc::new(Mutex::new(workspace)),
+            tool_router: Self::tool_router(),
+        }
+    }
+
+    fn with_workspace<T>(&self, action: impl FnOnce(&mut Workspace) -> T) -> T {
+        let mut workspace = self
+            .workspace
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        action(&mut workspace)
+    }
+}
+
+#[tool_router]
+impl DdMapperServer {
+    #[tool(
+        description = "Create an empty map of width x height cells (1 cell = 5 ft). \
+Returns its map_id."
+    )]
+    fn map_new(&self, Parameters(params): Parameters<MapNewParams>) -> CallToolResult {
+        reply(self.with_workspace(|workspace| workspace.new_map(params.width, params.height)))
+    }
+
+    #[tool(
+        description = "Open a .dungeondraft_map file saved by Dungeondraft as a new map: \
+rooms, pillars, free walls, doors, floor tiles, props, lights and patterns. Saving it keeps \
+everything else the file holds. Returns its map_id and what could not be imported."
+    )]
+    fn map_open(&self, Parameters(params): Parameters<MapOpenParams>) -> CallToolResult {
+        let source = Path::new(&params.path);
+        let opened = self.with_workspace(|workspace| workspace.open_map(source));
+        reply(opened.map(|report| open_report(&report)))
+    }
+
+    #[tool(
+        description = "Draw a whole building on a new map in one go: its outer walls, \
+partitions splitting it into rooms, and doors so that every room can be reached, plus \
+entrances. Generators: bsp (rooms split at random), hab_block (cells along a corridor), \
+ship_deck (a hab block with a bow). Returns the map_id; then furnish it."
+    )]
+    fn layout_generate(
+        &self,
+        Parameters(params): Parameters<LayoutGenerateParams>,
+    ) -> CallToolResult {
+        let request = LayoutRequest::from(params);
+        let report = self.with_workspace(|workspace| workspace.generate(&request));
+        reply(report.map(|report| layout_report(&report)))
+    }
+
+    #[tool(
+        description = "Add a walled room: a rectangle or polygon on grid vertices, with \
+optional pillars, a floor tileset and a wall texture (asset paths from catalog_search). \
+Rooms sharing area or a wall length merge, like with Dungeondraft's room tool. \
+Returns the room id and what the merge absorbed."
+    )]
+    fn room_add(&self, Parameters(params): Parameters<RoomAddParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        let report = self.with_workspace(|workspace| workspace.add_room(&map, &request));
+        reply(report.map(|report| room_report(&report)))
+    }
+
+    #[tool(
+        description = "Add a free-standing wall through points on grid vertices, such as a \
+partition splitting a room, so that doors can join the parts. It does not close and never \
+merges with rooms. Returns the wall id (W0...)."
+    )]
+    fn wall_add(&self, Parameters(params): Parameters<WallAddParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        reply(self.with_workspace(|workspace| workspace.add_wall(&map, &request)))
+    }
+
+    #[tool(
+        description = "Add a door or window (kind portal) on the walls of a room (R0) or of \
+a free-standing wall (W0), at the wall point nearest to (x, y). Returns the door id."
+    )]
+    fn door_add(&self, Parameters(params): Parameters<DoorAddParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        reply(self.with_workspace(|workspace| workspace.add_door(&map, &request)))
+    }
+
+    #[tool(
+        description = "Place an object centered on (x, y), turned by 0, 90, 180 or 270 \
+degrees. Its footprint is the asset's real size. Returns the prop id."
+    )]
+    fn prop_place(&self, Parameters(params): Parameters<PropPlaceParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        reply(self.with_workspace(|workspace| workspace.place_prop(&map, &request)))
+    }
+
+    #[tool(
+        description = "Add a light (kind light) centered on (x, y), with an optional range \
+in cells, intensity and RRGGBB color. Returns the light id (L0...)."
+    )]
+    fn light_add(&self, Parameters(params): Parameters<LightAddParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        reply(self.with_workspace(|workspace| workspace.add_light(&map, &request)))
+    }
+
+    #[tool(
+        description = "Paint a pattern texture (kind pattern) over a rectangle or polygon on grid vertices: grates, fans, hazard stripes, markings. Returns the pattern id (S0...)."
+    )]
+    fn pattern_add(&self, Parameters(params): Parameters<PatternAddParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        reply(self.with_workspace(|workspace| workspace.add_pattern(&map, &request)))
+    }
+
+    #[tool(
+        description = "Describe a map in text: rooms, doors and props with their ids, \
+positions and assets, as labelled on map_preview."
+    )]
+    fn map_describe(&self, Parameters(params): Parameters<MapIdParams>) -> CallToolResult {
+        reply(self.with_workspace(|workspace| workspace.describe(&params.map_id)))
+    }
+
+    #[tool(
+        description = "Check a map for likely design mistakes: rooms without doors, props \
+outside rooms, across walls or overlapping."
+    )]
+    fn map_validate(&self, Parameters(params): Parameters<MapIdParams>) -> CallToolResult {
+        let warnings = self.with_workspace(|workspace| workspace.validate(&params.map_id));
+        reply(warnings.map(|warnings| warnings_text(&warnings)))
+    }
+
+    #[tool(
+        description = "Draw a schematic PNG of a map: floors colored by tileset, walls in \
+black, doors in orange, props as blue boxes, with R/D/P ids. Look at it after each step."
+    )]
+    fn map_preview(&self, Parameters(params): Parameters<MapPreviewParams>) -> CallToolResult {
+        let pixels_per_cell = params.pixels_per_cell.unwrap_or(DEFAULT_PIXELS_PER_CELL);
+        let png =
+            self.with_workspace(|workspace| workspace.preview_png(&params.map_id, pixels_per_cell));
+        match png {
+            Ok(png) => {
+                let data = base64::engine::general_purpose::STANDARD.encode(png);
+                CallToolResult::success(vec![ContentBlock::image(data, "image/png")])
+            }
+            Err(error) => failure(&error),
+        }
+    }
+
+    #[tool(description = "Write a map to a .dungeondraft_map file, to open in Dungeondraft.")]
+    fn map_save(&self, Parameters(params): Parameters<MapSaveParams>) -> CallToolResult {
+        let destination = Path::new(&params.path);
+        let saved = self.with_workspace(|workspace| workspace.save(&params.map_id, destination));
+        reply(saved.map(|()| format!("Saved {} to {}.", params.map_id, params.path)))
+    }
+
+    #[tool(
+        description = "Search assets by words, kind (tileset, wall, portal, object, light, \
+pattern, terrain, path), tags or pack. Returns asset paths with their size in cells."
+    )]
+    fn catalog_search(
+        &self,
+        Parameters(params): Parameters<CatalogSearchParams>,
+    ) -> CallToolResult {
+        let query = AssetQuery::from(params);
+        let lines = self.with_workspace(|workspace| {
+            workspace
+                .search_catalog(&query)
+                .into_iter()
+                .map(dd_app::asset_line)
+                .collect::<Vec<_>>()
+        });
+        if lines.is_empty() {
+            return success("No asset matches; try fewer or other words, or another kind.");
+        }
+        success(&lines.join("\n"))
+    }
+}
+
+#[tool_handler(router = self.tool_router)]
+impl ServerHandler for DdMapperServer {
+    fn get_info(&self) -> ServerConfig {
+        let capabilities = ServerCapabilities::builder()
+            .enable_tools()
+            .enable_resources()
+            .enable_prompts()
+            .build();
+        let identity = Implementation::new(SERVER_NAME, env!("CARGO_PKG_VERSION"))
+            .with_description("Designs Dungeondraft maps on a grid, with previews.");
+        ServerConfig::new(capabilities)
+            .with_server_info(identity)
+            .with_instructions(INSTRUCTIONS)
+    }
+
+    async fn list_resources(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, ErrorData> {
+        let summary = Resource::new(CATALOG_SUMMARY_URI, "catalog_summary")
+            .with_description("How many assets each pack provides, by kind.")
+            .with_mime_type("text/plain");
+        Ok(ListResourcesResult {
+            resources: vec![summary],
+            ..ListResourcesResult::default()
+        })
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResponse, ErrorData> {
+        if request.uri != CATALOG_SUMMARY_URI {
+            let message = format!("no resource {}; try {CATALOG_SUMMARY_URI}", request.uri);
+            return Err(ErrorData::resource_not_found(message, None));
+        }
+        let summary = self.with_workspace(|workspace| workspace.catalog_summary());
+        let contents = ResourceContents::text(summary, CATALOG_SUMMARY_URI);
+        Ok(ReadResourceResult::new(vec![contents]).into())
+    }
+
+    async fn list_prompts(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListPromptsResult, ErrorData> {
+        let brief = PromptArgument::new(BRIEF_ARGUMENT)
+            .with_description("The location to design, in a sentence.")
+            .with_required(false);
+        let prompt = Prompt::new(
+            DESIGN_PROMPT_NAME,
+            Some(DESIGN_PROMPT_DESCRIPTION),
+            Some(vec![brief]),
+        );
+        Ok(ListPromptsResult {
+            prompts: vec![prompt],
+            ..ListPromptsResult::default()
+        })
+    }
+
+    async fn get_prompt(
+        &self,
+        request: GetPromptRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<GetPromptResponse, ErrorData> {
+        if request.name != DESIGN_PROMPT_NAME {
+            let message = format!("no prompt {}; try {DESIGN_PROMPT_NAME}", request.name);
+            return Err(ErrorData::invalid_params(message, None));
+        }
+        let brief = request
+            .arguments
+            .as_ref()
+            .and_then(|arguments| arguments.get(BRIEF_ARGUMENT))
+            .and_then(|brief| brief.as_str())
+            .unwrap_or(DEFAULT_BRIEF)
+            .to_owned();
+        let message = PromptMessage::new_text(Role::User, design_prompt(&brief));
+        Ok(GetPromptResult::new(vec![message])
+            .with_description(DESIGN_PROMPT_DESCRIPTION)
+            .into())
+    }
+}
+
+fn reply(result: Result<String, AppError>) -> CallToolResult {
+    match result {
+        Ok(text) => success(&text),
+        Err(error) => failure(&error),
+    }
+}
+
+fn success(text: &str) -> CallToolResult {
+    CallToolResult::success(vec![ContentBlock::text(text)])
+}
+
+fn failure(error: &AppError) -> CallToolResult {
+    CallToolResult::error(vec![ContentBlock::text(error.to_string())])
+}
+
+fn room_report(report: &RoomReport) -> String {
+    let mut parts = vec![report.id.clone()];
+    if !report.absorbed.is_empty() {
+        parts.push(format!("merged rooms {}", report.absorbed.join(", ")));
+    }
+    if !report.removed_doors.is_empty() {
+        parts.push(format!(
+            "removed doors {} whose wall disappeared",
+            report.removed_doors.join(", ")
+        ));
+    }
+    parts.join("; ")
+}
+
+fn layout_report(report: &LayoutReport) -> String {
+    format!(
+        "{}: room {} split into {} areas by {} walls, with {} doors. \
+Call map_describe and map_preview to see where they are.",
+        report.map, report.room, report.areas, report.walls, report.doors
+    )
+}
+
+fn open_report(report: &OpenReport) -> String {
+    if report.warnings.is_empty() {
+        return report.id.clone();
+    }
+    format!(
+        "{}\nNot imported:\n- {}",
+        report.id,
+        report.warnings.join("\n- ")
+    )
+}
+
+fn warnings_text(warnings: &[String]) -> String {
+    if warnings.is_empty() {
+        return "No warning.".to_owned();
+    }
+    warnings.join("\n")
+}

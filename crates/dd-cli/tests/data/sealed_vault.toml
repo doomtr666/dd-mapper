@@ -1,0 +1,12 @@
+# A room nobody can enter: validation warns about it.
+
+[style]
+floor = "res://packs/LOREGD01/textures/tilesets/simple/Tileset_RT_Punched_Floor.webp"
+wall = "res://packs/LOREGD01/textures/walls/Wall_Underhive_Industrial.webp"
+
+[map]
+width = 10
+height = 10
+
+[[room]]
+shape = { type = "rectangle", x = 2, y = 2, width = 6, height = 6 }

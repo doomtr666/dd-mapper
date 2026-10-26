@@ -1,0 +1,21 @@
+# A few LORE assets, described by hand, so that tests need no pack.
+
+[[asset]]
+path = "res://packs/LOREGD01/textures/tilesets/simple/Tileset_RT_Punched_Floor.webp"
+
+[[asset]]
+path = "res://packs/LOREGD01/textures/walls/Wall_Underhive_Industrial.webp"
+
+[[asset]]
+path = "res://packs/LOREGD01/textures/portals/Door_Underhive_Industrial.webp"
+portal_radius = 154
+
+[[asset]]
+path = "res://packs/LOREGD01/textures/objects/[LORE] Containers/Container_Large_Metal_Crate_Green.webp"
+size = [1.8, 1.5]
+
+[[asset]]
+path = "res://packs/LOREGD01/textures/lights/Effect_Caged_Light_Cast.webp"
+
+[[asset]]
+path = "res://packs/LOREGD01/textures/patterns/normal/Artifcial/Tileset_AncientGothic_Quarters_Sewer_Open.webp"

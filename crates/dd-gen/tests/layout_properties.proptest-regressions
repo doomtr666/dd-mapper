@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc deadd377a0698ad565b0f1b6a3303a82246ec44cf6d8fc81e4b7030a756be29f # shrinks to params = HabParams { width: 16, height: 8, min_room: 3, seed: 0 }
+cc 75d781e498c9698546e670e30a1b4f8e786e7e30750de59306a9fec628873b52 # shrinks to params = HabParams { width: 16, height: 8, min_room: 3, seed: 0 }
+cc 9d525a8e50e87e289714bdca3f8709235b6d2b5f8937c862ce6aa5be2a25ca14 # shrinks to params = HabParams { width: 16, height: 8, min_room: 3, seed: 0 }
+cc 175f19f182a4b554f00c366f28c5f82d6013f8b3f2fe345b4b65a986142278f8 # shrinks to params = BspParams { width: 8, height: 8, min_room: 2, seed: 0 }, hab = HabParams { width: 16, height: 8, min_room: 3, seed: 0 }

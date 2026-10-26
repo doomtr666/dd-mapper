@@ -1,0 +1,19 @@
+[package]
+name = "dd-setup"
+version = "0.1.0"
+description = "Composition shared by the binaries: asset sources, file and preview adapters"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dd-app.workspace = true
+dd-catalog.workspace = true
+dd-catalog-io.workspace = true
+dd-domain.workspace = true
+dd-format.workspace = true
+dd-render.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+[package]
+name = "dd-app"
+version = "0.1.0"
+description = "Application layer: map sessions and use cases, behind ports"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+dd-catalog.workspace = true
+dd-domain.workspace = true
+dd-gen.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

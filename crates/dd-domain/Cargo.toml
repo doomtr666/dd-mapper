@@ -1,0 +1,17 @@
+[package]
+name = "dd-domain"
+version = "0.1.0"
+description = "Pure map model: grid, polygons, rooms, walls and doors, with their invariants"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+i_overlay.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

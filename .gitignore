@@ -1,0 +1,11 @@
+/target
+**/*.rs.bk
+*.pending-snap
+
+# Licensed asset packs and the Dungeondraft engine archive: never commit or redistribute.
+/assets/packs/
+*.dungeondraft_pack
+*.pck
+
+# Maps
+/assets/maps/

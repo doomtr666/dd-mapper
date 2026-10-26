@@ -1,0 +1,26 @@
+# A hab block drawn by a generator, then lit.
+# dd-mapper generate hab_block.toml --out hab.dungeondraft_map --preview hab.png --catalog catalog.toml
+
+[style]
+floor = "res://packs/LOREGD01/textures/tilesets/simple/Tileset_RT_Punched_Floor.webp"
+wall = "res://packs/LOREGD01/textures/walls/Wall_Underhive_Industrial.webp"
+door = "res://packs/LOREGD01/textures/portals/Door_Underhive_Industrial.webp"
+
+[generate]
+generator = "hab_block"
+width = 32
+height = 14
+seed = 40000
+min_room = 4
+
+[[light]]
+asset = "res://packs/LOREGD01/textures/lights/Effect_Caged_Light_Cast.webp"
+at = [8, 7]
+range = 4
+color = "80beff"
+
+[[light]]
+asset = "res://packs/LOREGD01/textures/lights/Effect_Caged_Light_Cast.webp"
+at = [24, 7]
+range = 4
+color = "80beff"

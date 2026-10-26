@@ -1,0 +1,18 @@
+[package]
+name = "dd-render"
+version = "0.1.0"
+description = "Schematic PNG preview of a map: floors, walls, doors, props and grid"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+dd-domain.workspace = true
+thiserror.workspace = true
+tiny-skia.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+
+[lints]
+workspace = true
