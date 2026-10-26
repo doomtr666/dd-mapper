@@ -1,6 +1,8 @@
 //! Requests, in cells, as adapters receive them.
 
-use dd_domain::{CellPoint, Polygon, PolygonError};
+use dd_domain::{CellPoint, CellPosition, FreeShape, Polygon, PolygonError};
+
+use crate::AppError;
 
 /// An area of the grid, given by its corners on grid vertices.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,13 +98,35 @@ pub struct LightRequest {
     pub color: Option<String>,
 }
 
+/// Where a pattern goes: a shape on grid vertices, or a circle anywhere.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PatternArea {
+    Grid(Shape),
+    Circle { x: f64, y: f64, radius: f64 },
+}
+
+impl PatternArea {
+    /// # Errors
+    /// Fails on a polygon without an area or a circle without a radius.
+    pub fn to_free_shape(&self) -> Result<FreeShape, AppError> {
+        match self {
+            Self::Grid(shape) => Ok(FreeShape::from(&shape.to_polygon()?)),
+            Self::Circle { x, y, radius } => {
+                Ok(FreeShape::circle(CellPosition::new(*x, *y), *radius)?)
+            }
+        }
+    }
+}
+
 /// A texture painted over an area of the floor.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PatternRequest {
-    pub shape: Shape,
+    pub area: PatternArea,
     pub asset: String,
     /// `RRGGBB` or `AARRGGBB` tint; none keeps the texture as is.
     pub color: Option<String>,
+    /// A dark line along the edge, like a cut through the ground.
+    pub outlined: bool,
 }
 
 /// A prop centered on `(x, y)`.

@@ -3,10 +3,11 @@
 use std::collections::BTreeSet;
 
 use dd_domain::{
-    AssetPath, Cell, CellPosition, Footprint, Glow, Light, Pattern, Polygon, Prop, Rotation, Track,
+    AssetPath, Cell, CellPosition, Footprint, FreeShape, Glow, Light, Pattern, Prop, Rotation,
+    Track,
 };
 
-use super::cells::{grid_points, position};
+use super::cells::position;
 use super::{FootprintOf, Importer};
 use crate::export::{CELL_SIZE_PX, slot_textures, unpack_cave, unpack_splat};
 use crate::godot::Vector2;
@@ -114,18 +115,27 @@ pub fn import_patterns(importer: &mut Importer, level: &Level) {
 }
 
 fn import_pattern(importer: &mut Importer, pattern: &PatternRecord) -> Result<(), String> {
-    let (corners, on_grid) = grid_points(&pattern.points);
     let transformed = pattern.rotation != 0.0
         || pattern.shape_rotation != 0.0
-        || pattern.position.x != 0.0
-        || pattern.position.y != 0.0;
-    if !on_grid || transformed {
+        || pattern.scale != Vector2::new(1.0, 1.0);
+    if transformed {
         importer.warn(format!(
-            "pattern {} is moved, turned or off the grid; only its outline on the grid is kept",
+            "pattern {} is turned or scaled; only its outline is kept",
             pattern.node_id.0
         ));
     }
-    let area = Polygon::new(corners).map_err(|error| error.to_string())?;
+    let points = pattern
+        .points
+        .0
+        .iter()
+        .map(|pixel| {
+            position(Vector2::new(
+                pixel.x + pattern.position.x,
+                pixel.y + pattern.position.y,
+            ))
+        })
+        .collect();
+    let area = FreeShape::new(points).map_err(|error| error.to_string())?;
     let asset = AssetPath::new(pattern.texture.clone()).map_err(|error| error.to_string())?;
     importer
         .map
@@ -133,6 +143,7 @@ fn import_pattern(importer: &mut Importer, pattern: &PatternRecord) -> Result<()
             asset,
             area,
             tint: pattern.color.0,
+            outlined: pattern.outline,
         })
         .map(|_| ())
         .map_err(|error| error.to_string())

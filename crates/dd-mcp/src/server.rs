@@ -265,7 +265,7 @@ in cells, intensity and RRGGBB color. Returns the light id (L0...)."
     }
 
     #[tool(
-        description = "Paint a pattern texture (kind pattern) over a rectangle or polygon on grid vertices: grates, fans, hazard stripes, markings. Returns the pattern id (S0...)."
+        description = "Paint a pattern texture (kind pattern) over a rectangle or polygon on grid vertices (grates, fans, hazard stripes, markings) or over a true circle (a blast cut clean through the ground, a crater, a ritual circle); outline=true draws a dark edge. Returns the pattern id (S0...)."
     )]
     fn pattern_add(&self, Parameters(params): Parameters<PatternAddParams>) -> CallToolResult {
         let (map, request) = params.into_request();

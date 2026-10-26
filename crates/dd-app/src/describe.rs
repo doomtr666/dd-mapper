@@ -185,12 +185,17 @@ fn door_line(map: &Map, id: DoorId, door: &Door) -> String {
 }
 
 fn pattern_line(id: PatternId, pattern: &Pattern) -> String {
+    let (low, high) = pattern.area.bounds();
+    let outlined = if pattern.outlined { ", outlined" } else { "" };
     format!(
-        "- {}: {} {}, tint {:08x}
+        "- {}: {} from ({}, {}) to ({}, {}), tint {:08x}{outlined}
 ",
         pattern_label(id),
         asset_name(&pattern.asset),
-        bounds_text(&pattern.area),
+        hundredths(low.x),
+        hundredths(low.y),
+        hundredths(high.x),
+        hundredths(high.y),
         pattern.tint,
     )
 }

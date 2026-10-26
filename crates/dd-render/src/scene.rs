@@ -74,8 +74,8 @@ fn draw_floor(canvas: &mut Canvas, map: &Map) {
 
 fn draw_patterns(canvas: &mut Canvas, map: &Map) {
     for (_, pattern) in map.patterns() {
-        canvas.fill_ring_with_alpha(
-            pattern.area.vertices(),
+        canvas.fill_outline_with_alpha(
+            pattern.area.points(),
             pattern_color(&pattern.asset),
             PATTERN_ALPHA,
         );
@@ -459,8 +459,9 @@ mod tests {
         let mut map = reference_map();
         map.add_pattern(Pattern {
             asset: asset("grate.webp"),
-            area: Polygon::rectangle(CellPoint::new(2, 4), 1, 1).unwrap(),
+            area: (&Polygon::rectangle(CellPoint::new(2, 4), 1, 1).unwrap()).into(),
             tint: 0xffff_ffff,
+            outlined: false,
         })
         .unwrap();
         let preview = render(&map, &plain_options()).unwrap();

@@ -25,7 +25,7 @@ pub use map::{
     TrackId, WallPosition, WallRef,
 };
 pub use partition::{Partition, PartitionError};
-pub use pattern::Pattern;
+pub use pattern::{FreeShape, FreeShapeError, Pattern};
 pub use polygon::{Polygon, PolygonError, Segment};
 pub use prop::{Footprint, Prop, PropError, Rotation};
 pub use room::{Room, RoomError, WallLoop};

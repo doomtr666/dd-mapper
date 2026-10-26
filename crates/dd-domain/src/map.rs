@@ -80,8 +80,8 @@ pub enum MapError {
     UnknownPartition(PartitionId),
     #[error("wall point ({}, {}) lies outside the map", point.x, point.y)]
     PartitionOutsideGrid { point: CellPoint },
-    #[error("pattern vertex ({}, {}) lies outside the map", vertex.x, vertex.y)]
-    PatternOutsideGrid { vertex: CellPoint },
+    #[error("pattern point ({}, {}) lies outside the map", point.x, point.y)]
+    PatternOutsideGrid { point: CellPosition },
     #[error("light center ({}, {}) lies outside the map", center.x, center.y)]
     LightOutsideGrid { center: CellPosition },
     #[error("prop center ({}, {}) lies outside the map", center.x, center.y)]
@@ -467,10 +467,15 @@ impl Map {
     }
 
     /// # Errors
-    /// Fails when a vertex of the pattern lies outside the map.
+    /// Fails when a point of the pattern's outline lies outside the map.
     pub fn add_pattern(&mut self, pattern: Pattern) -> Result<PatternId, MapError> {
-        if let Some(vertex) = self.first_outside_grid(pattern.area.vertices()) {
-            return Err(MapError::PatternOutsideGrid { vertex });
+        let outside = pattern
+            .area
+            .points()
+            .iter()
+            .find(|point| !self.grid.contains_position(**point));
+        if let Some(point) = outside {
+            return Err(MapError::PatternOutsideGrid { point: *point });
         }
         let id = PatternId(allocate(&mut self.next_pattern_id));
         self.patterns.push((id, pattern));
@@ -596,8 +601,8 @@ mod tests {
         TrackId, WallPosition, WallRef,
     };
     use crate::{
-        AssetPath, Cell, CellPoint, CellPosition, Footprint, Glow, GridSize, Light, Partition,
-        Pattern, Polygon, Prop, Room, Rotation, Track, WallLoop,
+        AssetPath, Cell, CellPoint, CellPosition, Footprint, FreeShape, Glow, GridSize, Light,
+        Partition, Pattern, Polygon, Prop, Room, Rotation, Track, WallLoop,
     };
 
     fn map() -> Map {
@@ -1016,8 +1021,9 @@ mod tests {
     fn grate(x: i32, y: i32) -> Pattern {
         Pattern {
             asset: AssetPath::new("grate.webp").unwrap(),
-            area: Polygon::rectangle(CellPoint::new(x, y), 1, 1).unwrap(),
+            area: FreeShape::from(&Polygon::rectangle(CellPoint::new(x, y), 1, 1).unwrap()),
             tint: 0xffff_ffff,
+            outlined: false,
         }
     }
 
@@ -1030,7 +1036,7 @@ mod tests {
         assert_eq!(
             map.add_pattern(grate(35, 2)),
             Err(MapError::PatternOutsideGrid {
-                vertex: CellPoint::new(36, 3)
+                point: CellPosition::new(36.0, 3.0)
             })
         );
     }

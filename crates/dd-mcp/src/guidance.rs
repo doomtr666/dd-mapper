@@ -90,8 +90,9 @@ project their pattern on the floor. Colored light sets the mood (a cold blue, a 
 sickly green, a warm fire); keep intensities around 0.6 to 1.2.
 10. Details: conveyor belts, cables and pipes with path_add, sharp=true for \
 hazard stripes, fences and pipes along walls (search kind path); floor patterns \
-with pattern_add for man-made shapes only (grates, hazard stripes): a pattern \
-keeps the straight edges of its shape, so make spills and puddles with organic \
+with pattern_add for man-made shapes (grates, hazard stripes) and clean-cut \
+circles (a blast crater, a ritual circle; outline=true marks the cut): a pattern \
+keeps the hard edges of its shape, so make spills and puddles with organic \
 props instead: blood_water_stain props given a color (5aff3c for acid, 3a2a1a \
 for oil), or swamp_puddle. Then clutter with prop_scatter (debris piles, papers, \
 tools, bones of at least half a cell: smaller ones barely show), and a background \

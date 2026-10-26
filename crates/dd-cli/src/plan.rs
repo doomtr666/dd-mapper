@@ -89,13 +89,15 @@
 //! [[pattern]]
 //! asset = "res://packs/.../Tileset_AncientGothic_Quarters_Sewer_Open.webp"
 //! shape = { type = "polygon", points = [[8, 2], [10, 2], [10, 4]] }
+//!                              # or { type = "circle", x = 20, y = 14, radius = 6 }
+//! outline = false              # true draws a dark edge, like a cut through the ground
 //! ```
 
 use anyhow::Context as _;
 use dd_app::{
     CaveNetwork, CaveRequest, DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest, FloorRequest,
-    Generator, LayoutRequest, LightRequest, NaturalShape, PathRequest, PatternRequest, PropRequest,
-    RoomRequest, ScatterRequest, Shape, TerrainRequest, WallRequest, Workspace,
+    Generator, LayoutRequest, LightRequest, NaturalShape, PathRequest, PatternArea, PatternRequest,
+    PropRequest, RoomRequest, ScatterRequest, Shape, TerrainRequest, WallRequest, Workspace,
 };
 use serde::Deserialize;
 
@@ -306,12 +308,34 @@ struct LightPlan {
     color: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PatternPlan {
     asset: String,
-    shape: ShapePlan,
+    shape: PatternShapePlan,
     color: Option<String>,
+    #[serde(default)]
+    outline: bool,
+}
+
+/// A grid shape, or a circle anywhere.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+enum PatternShapePlan {
+    Rectangle {
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    },
+    Polygon {
+        points: Vec<[i32; 2]>,
+    },
+    Circle {
+        x: f64,
+        y: f64,
+        radius: f64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -507,6 +531,28 @@ impl From<&ShapePlan> for Shape {
     }
 }
 
+impl From<&PatternShapePlan> for PatternArea {
+    fn from(shape: &PatternShapePlan) -> Self {
+        match shape {
+            &PatternShapePlan::Rectangle {
+                x,
+                y,
+                width,
+                height,
+            } => Self::Grid(Shape::Rectangle {
+                x,
+                y,
+                width,
+                height,
+            }),
+            PatternShapePlan::Polygon { points: corners } => {
+                Self::Grid(Shape::Polygon(points(corners)))
+            }
+            &PatternShapePlan::Circle { x, y, radius } => Self::Circle { x, y, radius },
+        }
+    }
+}
+
 impl GeneratePlan {
     fn request(&self, style: &Style) -> anyhow::Result<LayoutRequest> {
         Ok(LayoutRequest {
@@ -683,9 +729,10 @@ impl ScatterPlan {
 impl PatternPlan {
     fn request(&self) -> PatternRequest {
         PatternRequest {
-            shape: (&self.shape).into(),
+            area: (&self.shape).into(),
             asset: self.asset.clone(),
             color: self.color.clone(),
+            outlined: self.outline,
         }
     }
 }
@@ -769,6 +816,11 @@ color = "80beff"
 [[pattern]]
 asset = "res://packs/LOREGD01/textures/patterns/normal/Artifcial/Tileset_AncientGothic_Quarters_Sewer_Open.webp"
 shape = { type = "polygon", points = [[8, 6], [10, 6], [10, 8]] }
+
+[[pattern]]
+asset = "res://packs/LOREGD01/textures/patterns/normal/Artifcial/Tileset_AncientGothic_Quarters_Sewer_Open.webp"
+shape = { type = "circle", x = 4.5, y = 6, radius = 1.5 }
+outline = true
 "#,
         )
         .unwrap();
@@ -782,6 +834,7 @@ shape = { type = "polygon", points = [[8, 6], [10, 6], [10, 8]] }
             "P0: Container_Large_Metal_Crate_Green at (3, 3), 90 degrees",
             "L0: Effect_Caged_Light_Cast at (9, 4), range 4 cells",
             "S0: Tileset_AncientGothic_Quarters_Sewer_Open",
+            "S1: Tileset_AncientGothic_Quarters_Sewer_Open from (3, 4.5) to (6, 7.5), tint ffffffff, outlined",
         ] {
             assert!(description.contains(expected), "{expected}\n{description}");
         }

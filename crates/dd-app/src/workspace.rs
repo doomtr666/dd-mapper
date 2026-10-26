@@ -246,8 +246,9 @@ impl Workspace {
         };
         let pattern = Pattern {
             asset,
-            area: request.shape.to_polygon()?,
+            area: request.area.to_free_shape()?,
             tint,
+            outlined: request.outlined,
         };
         let id = self.map_mut(map)?.add_pattern(pattern)?;
         Ok(pattern_label(id))
@@ -496,8 +497,8 @@ pub(crate) mod tests {
     };
     use crate::{
         AppError, DoorRequest, FloorRequest, FootprintOf, LightRequest, MapFiles, OpenedMap,
-        PathRequest, PatternRequest, PortError, PreviewRenderer, PropRequest, RoomRequest,
-        SaveFacts, Shape, WallRequest,
+        PathRequest, PatternArea, PatternRequest, PortError, PreviewRenderer, PropRequest,
+        RoomRequest, SaveFacts, Shape, WallRequest,
     };
 
     /// What a save was asked: destination, facts, template and room count.
@@ -759,6 +760,54 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn patterns_can_be_cut_round_and_outlined() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        let blast = PatternRequest {
+            area: PatternArea::Circle {
+                x: 10.0,
+                y: 8.0,
+                radius: 4.5,
+            },
+            asset: GRATE.to_owned(),
+            color: None,
+            outlined: true,
+        };
+        assert_eq!(workspace.add_pattern(&map, &blast), Ok("S0".to_owned()));
+        let description = workspace.describe(&map).unwrap();
+        assert!(
+            description.contains("from (5.5, 3.5) to (14.5, 12.5), tint ffffffff, outlined"),
+            "{description}"
+        );
+        let too_large = PatternRequest {
+            area: PatternArea::Circle {
+                x: 10.0,
+                y: 8.0,
+                radius: 9.0,
+            },
+            ..blast.clone()
+        };
+        assert!(matches!(
+            workspace.add_pattern(&map, &too_large),
+            Err(AppError::Map(
+                dd_domain::MapError::PatternOutsideGrid { .. }
+            ))
+        ));
+        let flat = PatternRequest {
+            area: PatternArea::Circle {
+                x: 10.0,
+                y: 8.0,
+                radius: 0.0,
+            },
+            ..blast
+        };
+        assert!(matches!(
+            workspace.add_pattern(&map, &flat),
+            Err(AppError::FreeShape(_))
+        ));
+    }
+
+    #[test]
     fn doors_far_from_every_wall_are_refused() {
         let (mut workspace, _) = workspace();
         let map = workspace.new_map(30, 20).unwrap();
@@ -978,9 +1027,10 @@ pub(crate) mod tests {
         let (mut workspace, _) = workspace();
         let map = workspace.new_map(30, 20).unwrap();
         let grate = PatternRequest {
-            shape: rectangle(11, 16, 1, 1),
+            area: PatternArea::Grid(rectangle(11, 16, 1, 1)),
             asset: GRATE.to_owned(),
             color: None,
+            outlined: false,
         };
         assert_eq!(workspace.add_pattern(&map, &grate), Ok("S0".to_owned()));
         let tinted = PatternRequest {

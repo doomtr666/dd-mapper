@@ -119,12 +119,12 @@ impl Canvas {
     }
 
     pub fn fill_ring(&mut self, ring: &[CellPoint], rgb: Rgb) {
-        self.fill_ring_with_alpha(ring, rgb, OPAQUE);
+        let positions: Vec<CellPosition> = ring.iter().map(|point| position_of(*point)).collect();
+        self.fill_outline_with_alpha(&positions, rgb, OPAQUE);
     }
 
-    pub fn fill_ring_with_alpha(&mut self, ring: &[CellPoint], rgb: Rgb, alpha: u8) {
-        let positions: Vec<CellPosition> = ring.iter().map(|point| position_of(*point)).collect();
-        if let Some(path) = self.closed_path(&positions) {
+    pub fn fill_outline_with_alpha(&mut self, outline: &[CellPosition], rgb: Rgb, alpha: u8) {
+        if let Some(path) = self.closed_path(outline) {
             self.pixmap.fill_path(
                 &path,
                 &paint(rgb, alpha),

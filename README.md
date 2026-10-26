@@ -113,7 +113,7 @@ Then restart Claude Desktop.
 | `light_add` | adds a light, with range, intensity and color |
 | `floor_paint` | repaints the floor of an area, such as one room, with another tileset |
 | `path_add` | draws a path along points: conveyor belts, cables, pipes, trails |
-| `pattern_add` | paints a floor pattern: grates, hazard stripes... |
+| `pattern_add` | paints a floor pattern over grid shapes (grates, hazard stripes...) or a true circle, optionally outlined |
 | `map_ambient` | sets the ambient light; dim it so that lights stand out |
 | `map_background` | covers the whole ground with a terrain texture, such as `terrain_void` for space |
 | `map_describe` | describes the map in text, with the ids shown on previews |
@@ -222,6 +222,8 @@ tileset = "res://packs/LORESP01/textures/tilesets/simple/Floor_SpaceShip_Grate_W
 [[pattern]]
 asset = "res://packs/LOREGD01/textures/patterns/normal/Artifcial/Tileset_AncientGothic_Quarters_Sewer_Open.webp"
 shape = { type = "polygon", points = [[8, 2], [10, 2], [10, 4]] }
+# or shape = { type = "circle", x = 20, y = 14, radius = 6 }
+# outline = true             # a dark edge, like a cut through the ground
 # color = "7f80beff"
 
 [[prop]]

@@ -2,8 +2,8 @@
 
 use dd_app::{
     CaveNetwork, CaveRequest, DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest, FloorRequest,
-    Generator, LayoutRequest, LightRequest, NaturalShape, PathRequest, PatternRequest, PropRequest,
-    RoomRequest, ScatterRequest, Shape, TerrainRequest, WallRequest,
+    Generator, LayoutRequest, LightRequest, NaturalShape, PathRequest, PatternArea, PatternRequest,
+    PropRequest, RoomRequest, ScatterRequest, Shape, TerrainRequest, WallRequest,
 };
 use dd_catalog::{AssetKind, AssetQuery};
 use schemars::JsonSchema;
@@ -140,23 +140,66 @@ impl DoorAddParams {
     }
 }
 
+/// A pattern's area: a shape on grid vertices, or a circle anywhere.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PatternShapeParams {
+    /// Axis-aligned rectangle from its top-left corner.
+    Rectangle {
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    },
+    /// Any simple polygon, corners in order, as `[x, y]` pairs.
+    Polygon { points: Vec<[i32; 2]> },
+    /// A true circle around (x, y): a blast, a crater, a ritual circle.
+    Circle { x: f64, y: f64, radius: f64 },
+}
+
+impl From<PatternShapeParams> for PatternArea {
+    fn from(shape: PatternShapeParams) -> Self {
+        match shape {
+            PatternShapeParams::Rectangle {
+                x,
+                y,
+                width,
+                height,
+            } => Self::Grid(Shape::Rectangle {
+                x,
+                y,
+                width,
+                height,
+            }),
+            PatternShapeParams::Polygon { points } => Self::Grid(Shape::Polygon(
+                points.into_iter().map(|[x, y]| (x, y)).collect(),
+            )),
+            PatternShapeParams::Circle { x, y, radius } => Self::Circle { x, y, radius },
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PatternAddParams {
     pub map_id: String,
-    /// The area to cover, on grid vertices.
-    pub shape: ShapeParams,
+    /// The area to cover.
+    pub shape: PatternShapeParams,
     /// Asset path of a pattern texture (`catalog_search` kind `pattern`).
     pub asset: String,
     /// `RRGGBB` or `AARRGGBB` tint; none keeps the texture as is.
     pub color: Option<String>,
+    /// Draw a dark line along the edge, like a cut through the ground.
+    #[serde(default)]
+    pub outline: bool,
 }
 
 impl PatternAddParams {
     pub fn into_request(self) -> (String, PatternRequest) {
         let request = PatternRequest {
-            shape: self.shape.into(),
+            area: self.shape.into(),
             asset: self.asset,
             color: self.color,
+            outlined: self.outline,
         };
         (self.map_id, request)
     }

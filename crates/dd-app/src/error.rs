@@ -1,6 +1,7 @@
 use dd_catalog::AssetKind;
 use dd_domain::{
-    GridError, LightError, MapError, PartitionError, PolygonError, PropError, RoomError, TrackError,
+    FreeShapeError, GridError, LightError, MapError, PartitionError, PolygonError, PropError,
+    RoomError, TrackError,
 };
 use thiserror::Error;
 
@@ -58,6 +59,8 @@ pub enum AppError {
     Light(#[from] LightError),
     #[error(transparent)]
     Polygon(#[from] PolygonError),
+    #[error(transparent)]
+    FreeShape(#[from] FreeShapeError),
     #[error(transparent)]
     Room(#[from] RoomError),
     #[error(transparent)]
