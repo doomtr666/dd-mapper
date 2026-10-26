@@ -95,7 +95,9 @@ keeps the straight edges of its shape, so make spills and puddles with organic \
 props instead: blood_water_stain props given a color (5aff3c for acid, 3a2a1a \
 for oil), or swamp_puddle. Then clutter with prop_scatter (debris piles, papers, \
 tools, bones of at least half a cell: smaller ones barely show), and a background \
-with map_background (terrain_void for space, rock or ash outdoors). Mind the \
+with map_background (terrain_void for space, rock or ash outdoors), and paint \
+the ground outdoors with terrain_paint: scorched or muddy patches, trails, fading \
+into each other. Mind the \
 density: a notable prop every 3 to 4 cells, a grime layer (dark-tinted stains \
 strewn by the dozen, rusted plate patterns), pipes and cables along the walls \
 (path_add), wall lamps. Bare floor reads as unfinished. Preview again.

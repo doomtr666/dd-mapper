@@ -2,7 +2,7 @@
 //! cans, papers, cables, crates, lockers...
 
 use dd_catalog::AssetKind;
-use dd_domain::{AssetPath, CellPosition, Footprint, Map, Polygon, Prop, QuarterTurn, Segment};
+use dd_domain::{AssetPath, CellPosition, Footprint, Map, Polygon, Prop, Rotation, Segment};
 use dd_gen::Random;
 
 use crate::assets::resolve;
@@ -38,6 +38,8 @@ pub struct ScatterRequest {
     pub along_walls: bool,
     /// `RRGGBB` or `AARRGGBB` custom color given to every prop.
     pub color: Option<String>,
+    /// Strew open ground too, outside rooms and caves, such as a street.
+    pub outdoors: bool,
 }
 
 /// What a scatter placed.
@@ -87,7 +89,7 @@ impl Workspace {
                         Some(anywhere(piece, &area, &mut random))
                     }
                 })
-                .find(|prop| fits(target, &area, prop));
+                .find(|prop| fits(target, &area, prop, request.outdoors));
             if let Some(prop) = spot {
                 props.push(prop_label(target.add_prop(Prop { tint, ..prop })?));
             }
@@ -142,7 +144,7 @@ fn anywhere(piece: &Piece, area: &Polygon, random: &mut Random) -> Prop {
             between(low.x, high.x, random),
             between(low.y, high.y, random),
         ),
-        rotation: QuarterTurn::from_degrees(turns * 90).unwrap_or(QuarterTurn::Deg0),
+        rotation: Rotation::from_degrees(f64::from(turns * 90)).unwrap_or(Rotation::NONE),
         footprint: piece.footprint,
         tint: None,
     }
@@ -180,12 +182,12 @@ fn against_wall(piece: &Piece, walls: &[Segment], random: &mut Random) -> Option
 }
 
 /// The turn making a prop face `(nx, ny)`: LORE art faces down at 0 degrees.
-fn facing(nx: i32, ny: i32) -> QuarterTurn {
+fn facing(nx: i32, ny: i32) -> Rotation {
     match (nx, ny) {
-        (0, 1) => QuarterTurn::Deg0,
-        (-1, 0) => QuarterTurn::Deg90,
-        (0, -1) => QuarterTurn::Deg180,
-        _ => QuarterTurn::Deg270,
+        (0, 1) => Rotation::NONE,
+        (-1, 0) => Rotation::QUARTER,
+        (0, -1) => Rotation::HALF,
+        _ => Rotation::THREE_QUARTERS,
     }
 }
 
@@ -207,8 +209,9 @@ fn straight_walls(map: &Map) -> Vec<Segment> {
     walls
 }
 
-/// Inside the area and a room or a cave, crossing no wall, prop or doorway.
-fn fits(map: &Map, area: &Polygon, prop: &Prop) -> bool {
+/// Inside the area and a room or a cave (or anywhere `outdoors`), crossing no
+/// wall, prop or doorway.
+fn fits(map: &Map, area: &Polygon, prop: &Prop, outdoors: bool) -> bool {
     let (low, high) = prop.bounds();
     let corners = [
         low,
@@ -226,7 +229,7 @@ fn fits(map: &Map, area: &Polygon, prop: &Prop) -> bool {
         .all(|point| map.cave().is_floor_at(*point));
     let clear_of_rooms = !map.rooms().any(|(_, room)| crosses_walls(room, prop));
     in_area
-        && (in_room || in_cave)
+        && (outdoors || in_room || in_cave)
         && clear_of_rooms
         && !map.partitions().any(|(_, wall)| {
             wall.segments()
@@ -270,13 +273,14 @@ fn distance_to_box(point: CellPosition, low: CellPosition, high: CellPosition) -
 
 #[cfg(test)]
 mod tests {
-    use dd_domain::QuarterTurn;
+    use dd_domain::Rotation;
 
     use super::ScatterRequest;
     use crate::assets::tests::{CAN, CRATE, DOOR, FLOOR, WALL};
     use crate::workspace::tests::workspace;
     use crate::{
-        AppError, CaveRequest, CaveShape, DoorRequest, RoomRequest, Shape, WallRequest, Workspace,
+        AppError, CaveRequest, DoorRequest, NaturalShape, RoomRequest, Shape, WallRequest,
+        Workspace,
     };
 
     fn rectangle(x: i32, y: i32, width: u32, height: u32) -> Shape {
@@ -324,6 +328,7 @@ mod tests {
             seed,
             along_walls: false,
             color: None,
+            outdoors: false,
         }
     }
 
@@ -373,11 +378,7 @@ mod tests {
             let gap = gap_to_walls(((low.x, low.y), (high.x, high.y)));
             assert!(gap < 0.2, "{prop:?} stands {gap} from the walls");
             if (low.y - 1.0).abs() < 0.2 {
-                assert_eq!(
-                    prop.rotation,
-                    QuarterTurn::Deg0,
-                    "{prop:?} under the top wall"
-                );
+                assert_eq!(prop.rotation, Rotation::NONE, "{prop:?} under the top wall");
             }
         }
     }
@@ -387,7 +388,7 @@ mod tests {
         let (mut workspace, _) = workspace();
         let map = workspace.new_map(30, 20).unwrap();
         let chamber = CaveRequest {
-            shape: CaveShape::Chamber {
+            shape: NaturalShape::Chamber {
                 x: 15.0,
                 y: 10.0,
                 radius: 5.0,
@@ -414,7 +415,7 @@ mod tests {
         let (mut workspace, _) = workspace();
         let map = workspace.new_map(30, 20).unwrap();
         let hall = CaveRequest {
-            shape: CaveShape::Chamber {
+            shape: NaturalShape::Chamber {
                 x: 15.0,
                 y: 10.0,
                 radius: 7.0,
@@ -437,6 +438,19 @@ mod tests {
         for (_, prop) in found.props() {
             assert!(!crate::validate::crosses_walls(room, prop), "{prop:?}");
         }
+    }
+
+    #[test]
+    fn strews_open_ground_when_outdoors() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        let indoors = workspace.scatter(&map, &strew(5, 3)).unwrap();
+        assert_eq!(indoors.missing, 5);
+        let outdoors = ScatterRequest {
+            outdoors: true,
+            ..strew(5, 3)
+        };
+        assert_eq!(workspace.scatter(&map, &outdoors).unwrap().missing, 0);
     }
 
     #[test]

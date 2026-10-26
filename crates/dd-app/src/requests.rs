@@ -111,7 +111,7 @@ pub struct PropRequest {
     pub asset: String,
     pub x: f64,
     pub y: f64,
-    pub rotation_degrees: i32,
+    pub rotation_degrees: f64,
     /// `RRGGBB` or `AARRGGBB` custom color, for assets Dungeondraft lets color.
     pub color: Option<String>,
 }

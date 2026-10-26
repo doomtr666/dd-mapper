@@ -38,6 +38,12 @@
 //! [[cave_entrance]]            # walls left open where a path comes in
 //! shape = { type = "chamber", x = 27, y = 10, radius = 1 }
 //!
+//! [[terrain]]                  # ground painted over the background, fading out
+//! asset = "res://packs/.../Tileset_Ash.webp"
+//! shape = { type = "chamber", x = 20, y = 14, radius = 8 }
+//! falloff = 2                  # cells of fade at the edge
+//! roughness = 0.4
+//!
 //! [[room]]                     # R0, R1... in order
 //! shape = { type = "rectangle", x = 1, y = 1, width = 12, height = 8 }
 //! pillars = [{ type = "rectangle", x = 6, y = 4, width = 1, height = 1 }]
@@ -78,6 +84,7 @@
 //! count = 15
 //! seed = 3
 //! along_walls = false          # true lines them along the walls, facing the room
+//! outdoors = false             # true strews open ground too: streets, plazas
 //!
 //! [[pattern]]
 //! asset = "res://packs/.../Tileset_AncientGothic_Quarters_Sewer_Open.webp"
@@ -86,9 +93,9 @@
 
 use anyhow::Context as _;
 use dd_app::{
-    CaveNetwork, CaveRequest, CaveShape, DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest,
-    FloorRequest, Generator, LayoutRequest, LightRequest, PathRequest, PatternRequest, PropRequest,
-    RoomRequest, ScatterRequest, Shape, WallRequest, Workspace,
+    CaveNetwork, CaveRequest, DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest, FloorRequest,
+    Generator, LayoutRequest, LightRequest, NaturalShape, PathRequest, PatternRequest, PropRequest,
+    RoomRequest, ScatterRequest, Shape, TerrainRequest, WallRequest, Workspace,
 };
 use serde::Deserialize;
 
@@ -124,6 +131,22 @@ pub struct Plan {
     cave: Vec<CavePlan>,
     #[serde(default)]
     cave_entrance: Vec<CaveEntrancePlan>,
+    #[serde(default)]
+    terrain: Vec<TerrainPlan>,
+}
+
+/// Width of the fade at the edge of painted terrain when none is given, in cells.
+const DEFAULT_FALLOFF: f64 = 1.5;
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TerrainPlan {
+    asset: String,
+    shape: NaturalShapePlan,
+    falloff: Option<f64>,
+    roughness: Option<f64>,
+    #[serde(default)]
+    seed: u64,
 }
 
 /// Roughness of dug walls when none is given.
@@ -131,7 +154,7 @@ const DEFAULT_ROUGHNESS: f64 = 0.4;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
-enum CaveShapePlan {
+enum NaturalShapePlan {
     Chamber {
         x: f64,
         y: f64,
@@ -167,7 +190,7 @@ struct CaveNetworkPlan {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CavePlan {
-    shape: CaveShapePlan,
+    shape: NaturalShapePlan,
     #[serde(default)]
     fill: bool,
     roughness: Option<f64>,
@@ -178,7 +201,7 @@ struct CavePlan {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CaveEntrancePlan {
-    shape: CaveShapePlan,
+    shape: NaturalShapePlan,
 }
 
 /// Assets used where an element names none.
@@ -267,9 +290,9 @@ struct DoorPlan {
 struct PropPlan {
     asset: String,
     at: [f64; 2],
-    /// Degrees: 0, 90, 180 or 270.
+    /// Clockwise degrees, any angle.
     #[serde(default)]
-    rotation: i32,
+    rotation: f64,
     color: Option<String>,
 }
 
@@ -321,6 +344,8 @@ struct ScatterPlan {
     #[serde(default)]
     along_walls: bool,
     color: Option<String>,
+    #[serde(default)]
+    outdoors: bool,
 }
 
 impl Plan {
@@ -352,7 +377,7 @@ impl Plan {
         Ok(map)
     }
 
-    /// Cave networks, then dug or filled shapes, then entrances.
+    /// Cave networks, dug or filled shapes, entrances, then painted terrain.
     fn dig_caves(&self, workspace: &mut Workspace, map: &str) -> anyhow::Result<()> {
         each(&self.cave_network, "cave_network", |network| {
             workspace.grow_caves(map, &network.network())?;
@@ -364,6 +389,10 @@ impl Plan {
         })?;
         each(&self.cave_entrance, "cave_entrance", |entrance| {
             workspace.open_cave_entrance(map, &(&entrance.shape).into())?;
+            Ok(())
+        })?;
+        each(&self.terrain, "terrain", |terrain| {
+            workspace.paint_terrain(map, &terrain.request())?;
             Ok(())
         })
     }
@@ -554,15 +583,15 @@ impl LightPlan {
     }
 }
 
-impl From<&CaveShapePlan> for CaveShape {
-    fn from(shape: &CaveShapePlan) -> Self {
+impl From<&NaturalShapePlan> for NaturalShape {
+    fn from(shape: &NaturalShapePlan) -> Self {
         match shape {
-            &CaveShapePlan::Chamber { x, y, radius } => Self::Chamber { x, y, radius },
-            CaveShapePlan::Tunnel { points, width } => Self::Tunnel {
+            &NaturalShapePlan::Chamber { x, y, radius } => Self::Chamber { x, y, radius },
+            NaturalShapePlan::Tunnel { points, width } => Self::Tunnel {
                 points: points.iter().map(|&[x, y]| (x, y)).collect(),
                 width: *width,
             },
-            &CaveShapePlan::Rectangle {
+            &NaturalShapePlan::Rectangle {
                 x,
                 y,
                 width,
@@ -573,7 +602,7 @@ impl From<&CaveShapePlan> for CaveShape {
                 width,
                 height,
             }),
-            CaveShapePlan::Polygon { points: corners } => {
+            NaturalShapePlan::Polygon { points: corners } => {
                 Self::Area(Shape::Polygon(points(corners)))
             }
         }
@@ -588,6 +617,18 @@ impl CaveNetworkPlan {
             width: self.width,
             height: self.height,
             density: self.density,
+            seed: self.seed,
+        }
+    }
+}
+
+impl TerrainPlan {
+    fn request(&self) -> TerrainRequest {
+        TerrainRequest {
+            asset: self.asset.clone(),
+            shape: (&self.shape).into(),
+            falloff: self.falloff.unwrap_or(DEFAULT_FALLOFF),
+            roughness: self.roughness.unwrap_or(DEFAULT_ROUGHNESS),
             seed: self.seed,
         }
     }
@@ -634,6 +675,7 @@ impl ScatterPlan {
             seed: self.seed,
             along_walls: self.along_walls,
             color: self.color.clone(),
+            outdoors: self.outdoors,
         }
     }
 }
@@ -834,12 +876,22 @@ shape = { type = "tunnel", points = [[17, 10], [24, 10]], width = 2 }
 
 [[cave_entrance]]
 shape = { type = "chamber", x = 27, y = 10, radius = 1 }
+
+[[terrain]]
+asset = "res://textures/terrain/terrain_void.png"
+shape = { type = "chamber", x = 24, y = 10, radius = 5 }
+falloff = 2
+roughness = 0.3
 "#,
         )
         .unwrap();
         let description = workspace.describe(&map).unwrap();
         assert!(description.contains("Cave: about"), "{description}");
         assert!(description.contains("with entrances"), "{description}");
+        assert!(
+            description.contains("Terrain: terrain_void"),
+            "{description}"
+        );
     }
 
     #[test]

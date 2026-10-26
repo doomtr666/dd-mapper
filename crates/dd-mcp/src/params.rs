@@ -1,9 +1,9 @@
 //! Tool parameters, as the model sends them. Positions and sizes are in cells.
 
 use dd_app::{
-    CaveNetwork, CaveRequest, CaveShape, DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest,
-    FloorRequest, Generator, LayoutRequest, LightRequest, PathRequest, PatternRequest, PropRequest,
-    RoomRequest, ScatterRequest, Shape, WallRequest,
+    CaveNetwork, CaveRequest, DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest, FloorRequest,
+    Generator, LayoutRequest, LightRequest, NaturalShape, PathRequest, PatternRequest, PropRequest,
+    RoomRequest, ScatterRequest, Shape, TerrainRequest, WallRequest,
 };
 use dd_catalog::{AssetKind, AssetQuery};
 use schemars::JsonSchema;
@@ -200,9 +200,9 @@ pub struct PropPlaceParams {
     /// Center of the prop, in cells.
     pub x: f64,
     pub y: f64,
-    /// Clockwise rotation in degrees: 0, 90, 180 or 270.
+    /// Clockwise rotation in degrees, any angle: 90 turns a prop facing south to face west.
     #[serde(default)]
-    pub rotation: i32,
+    pub rotation: f64,
     /// `RRGGBB` or `AARRGGBB` custom color, for assets Dungeondraft lets color
     /// (stains, puddles, cloth, colorable `_CLR` objects).
     pub color: Option<String>,
@@ -382,6 +382,9 @@ pub struct PropScatterParams {
     /// `RRGGBB` or `AARRGGBB` custom color given to every prop, such as a
     /// sickly green for acid puddles.
     pub color: Option<String>,
+    /// Strew open ground too, outside rooms and caves: streets, plazas, ruins.
+    #[serde(default)]
+    pub outdoors: bool,
 }
 
 impl PropScatterParams {
@@ -393,6 +396,7 @@ impl PropScatterParams {
             seed: self.seed,
             along_walls: self.along_walls,
             color: self.color,
+            outdoors: self.outdoors,
         };
         (self.map_id, request)
     }
@@ -468,10 +472,10 @@ impl PathAddParams {
 /// Default roughness of dug walls: natural, without spikes.
 const DEFAULT_ROUGHNESS: f64 = 0.4;
 
-/// What to dig, in cells.
+/// An area with natural edges, in cells: what caves dig and terrain paints.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum CaveShapeParams {
+pub enum NaturalShapeParams {
     /// A round chamber.
     Chamber { x: f64, y: f64, radius: f64 },
     /// A gallery along `[x, y]` points.
@@ -487,15 +491,15 @@ pub enum CaveShapeParams {
     Polygon { points: Vec<[i32; 2]> },
 }
 
-impl From<CaveShapeParams> for CaveShape {
-    fn from(shape: CaveShapeParams) -> Self {
+impl From<NaturalShapeParams> for NaturalShape {
+    fn from(shape: NaturalShapeParams) -> Self {
         match shape {
-            CaveShapeParams::Chamber { x, y, radius } => Self::Chamber { x, y, radius },
-            CaveShapeParams::Tunnel { points, width } => Self::Tunnel {
+            NaturalShapeParams::Chamber { x, y, radius } => Self::Chamber { x, y, radius },
+            NaturalShapeParams::Tunnel { points, width } => Self::Tunnel {
                 points: points.into_iter().map(|[x, y]| (x, y)).collect(),
                 width,
             },
-            CaveShapeParams::Rectangle {
+            NaturalShapeParams::Rectangle {
                 x,
                 y,
                 width,
@@ -506,7 +510,7 @@ impl From<CaveShapeParams> for CaveShape {
                 width,
                 height,
             }),
-            CaveShapeParams::Polygon { points } => Self::Area(Shape::Polygon(
+            NaturalShapeParams::Polygon { points } => Self::Area(Shape::Polygon(
                 points.into_iter().map(|[x, y]| (x, y)).collect(),
             )),
         }
@@ -516,7 +520,7 @@ impl From<CaveShapeParams> for CaveShape {
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct CaveCarveParams {
     pub map_id: String,
-    pub shape: CaveShapeParams,
+    pub shape: NaturalShapeParams,
     /// Fill the shape with rock instead of digging it.
     #[serde(default)]
     pub fill: bool,
@@ -543,7 +547,7 @@ impl CaveCarveParams {
 pub struct CaveEntranceParams {
     pub map_id: String,
     /// Where the cave walls stay open, usually a small chamber on the cave's edge.
-    pub shape: CaveShapeParams,
+    pub shape: NaturalShapeParams,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -571,5 +575,38 @@ impl From<CaveGenerateParams> for CaveNetwork {
             density: params.density,
             seed: params.seed,
         }
+    }
+}
+
+/// Default width of the fade at the edge of painted terrain, in cells.
+const DEFAULT_FALLOFF: f64 = 1.5;
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct TerrainPaintParams {
+    pub map_id: String,
+    /// Asset path of a terrain texture (`catalog_search` kind `terrain`).
+    pub asset: String,
+    /// Where to paint: a chamber (round patch), a tunnel (a trail along points)
+    /// or an exact rectangle or polygon.
+    pub shape: NaturalShapeParams,
+    /// Width of the fade into the ground around, in cells; 1.5 by default.
+    pub falloff: Option<f64>,
+    /// From 0 (smooth) to 1 (jagged) edges for chambers and tunnels, 0.4 by default.
+    pub roughness: Option<f64>,
+    /// The same seed gives the same edges.
+    #[serde(default)]
+    pub seed: u64,
+}
+
+impl TerrainPaintParams {
+    pub fn into_request(self) -> (String, TerrainRequest) {
+        let request = TerrainRequest {
+            asset: self.asset,
+            shape: self.shape.into(),
+            falloff: self.falloff.unwrap_or(DEFAULT_FALLOFF),
+            roughness: self.roughness.unwrap_or(DEFAULT_ROUGHNESS),
+            seed: self.seed,
+        };
+        (self.map_id, request)
     }
 }

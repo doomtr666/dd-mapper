@@ -100,13 +100,14 @@ Then restart Claude Desktop.
 | `map_new` | creates an empty map |
 | `map_open` | opens a map saved by Dungeondraft; saving keeps what the server does not model |
 | `layout_generate` | draws a whole building on a new map: `bsp`, `hab_block` or `ship_deck` |
+| `terrain_paint` | paints a terrain texture over the ground, fading into what lies around |
 | `cave_generate` | grows a network of caverns over an area; every part can be reached |
 | `cave_carve` | digs (or fills) a chamber, a tunnel or an exact area, with natural walls |
 | `cave_entrance` | leaves the cave walls open where a path enters |
 | `room_add` | adds a walled room (rectangle or polygon, with pillars); rooms merge like in Dungeondraft |
 | `wall_add` | adds a free-standing wall, such as a partition |
 | `door_add` | puts a door on a room (`R0`) or a wall (`W0`), at the wall point nearest to a position |
-| `prop_place` | places an object, turned by quarter turns |
+| `prop_place` | places an object, turned by any angle |
 | `prop_remove` | removes a prop, for instance to place it again turned another way |
 | `prop_scatter` | strews small props at random over an area, inside rooms, clear of walls, doorways and other props |
 | `light_add` | adds a light, with range, intensity and color |
@@ -196,6 +197,12 @@ seed = 1
 [[cave_entrance]]            # walls left open where a path comes in
 shape = { type = "chamber", x = 27, y = 10, radius = 1 }
 
+[[terrain]]                  # ground painted over the background, fading out
+asset = "res://packs/LORENT01/textures/terrain/TIleset_Rock_Bed.webp"
+shape = { type = "chamber", x = 20, y = 14, radius = 8 }
+falloff = 2                  # cells of fade at the edge
+roughness = 0.4
+
 [[room]]
 shape = { type = "rectangle", x = 1, y = 1, width = 12, height = 8 }
 pillars = [{ type = "rectangle", x = 6, y = 4, width = 1, height = 1 }]
@@ -220,7 +227,7 @@ shape = { type = "polygon", points = [[8, 2], [10, 2], [10, 4]] }
 [[prop]]
 asset = "res://packs/LOREGD01/textures/objects/[LORE] Containers/Container_Large_Metal_Crate_Green.webp"
 at = [3, 3]                  # center, in cells
-rotation = 90                # 0, 90, 180 or 270
+rotation = 90                # clockwise degrees, any angle
 
 [[path]]                     # conveyor belts, cables, pipes, trails
 asset = "res://packs/LOREGD01/textures/paths/Artificial/Path_Conveyor_Belt_Large.webp"

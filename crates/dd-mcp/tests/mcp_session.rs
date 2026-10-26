@@ -169,6 +169,7 @@ async fn lists_the_design_tools() {
             "prop_remove",
             "prop_scatter",
             "room_add",
+            "terrain_paint",
             "wall_add",
         ]
     );
@@ -388,6 +389,16 @@ async fn digs_caves_and_saves_them() {
         "map_id": "map-1",
         "shape": {"type": "chamber", "x": 28, "y": 10, "radius": 1},
     });
+    let scorched = json!({
+        "map_id": "map-1",
+        "asset": VOID,
+        "shape": {"type": "chamber", "x": 25, "y": 10, "radius": 5},
+        "falloff": 2,
+        "roughness": 0.4,
+        "seed": 9,
+    });
+    let painted = ok_text(&call(&client, "terrain_paint", scorched).await);
+    assert!(painted.starts_with("Painted about "), "{painted}");
     ok_text(&call(&client, "cave_entrance", opening).await);
     let description = ok_text(&call(&client, "map_describe", json!({"map_id": "map-1"})).await);
     assert!(description.contains("with entrances"), "{description}");
@@ -405,6 +416,9 @@ async fn digs_caves_and_saves_them() {
     let cave = &saved.world().levels["0"].cave;
     assert!(cave.bitmap.0.iter().any(|byte| *byte != 0));
     assert!(cave.entrance_bitmap.0.iter().any(|byte| *byte != 0));
+    let terrain = &saved.world().levels["0"].terrain;
+    assert_eq!(terrain.texture_2, VOID);
+    assert!(terrain.splat.0.chunks(4).any(|pixel| pixel[1] == 255));
     client.cancel().await.unwrap();
 }
 

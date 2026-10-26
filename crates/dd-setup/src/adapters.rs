@@ -112,7 +112,7 @@ impl PreviewRenderer for SchematicRenderer {
 mod tests {
     use dd_app::{MapFiles, SaveFacts};
     use dd_catalog::PackInfo;
-    use dd_domain::{AssetPath, CellPosition, Footprint, GridSize, Map, Prop, QuarterTurn};
+    use dd_domain::{AssetPath, CellPosition, Footprint, GridSize, Map, Prop, Rotation};
     use dd_format::model::MapFile;
 
     use super::DungeondraftFiles;
@@ -124,7 +124,7 @@ mod tests {
         map.add_prop(Prop {
             asset: AssetPath::new(thruster).unwrap(),
             center: CellPosition::new(3.0, 3.0),
-            rotation: QuarterTurn::Deg0,
+            rotation: Rotation::NONE,
             footprint: Footprint::new(1.86, 2.93).unwrap(),
             tint: None,
         })

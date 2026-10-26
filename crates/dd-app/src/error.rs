@@ -44,7 +44,12 @@ pub enum AppError {
     #[error("this generator needs a map of at least {width} x {height} cells")]
     MapTooSmall { width: u32, height: u32 },
     #[error("{0}")]
-    InvalidCaveShape(String),
+    InvalidNaturalShape(String),
+    #[error(
+        "a map blends four terrain textures at most, the background included; paint with \
+         one already used"
+    )]
+    TerrainFull,
     #[error("give at least one object asset to scatter")]
     NothingToScatter,
     #[error(transparent)]

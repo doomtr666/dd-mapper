@@ -12,6 +12,7 @@ mod pattern;
 mod polygon;
 mod prop;
 mod room;
+mod terrain;
 mod track;
 mod union;
 
@@ -26,7 +27,8 @@ pub use map::{
 pub use partition::{Partition, PartitionError};
 pub use pattern::Pattern;
 pub use polygon::{Polygon, PolygonError, Segment};
-pub use prop::{Footprint, Prop, PropError, QuarterTurn};
+pub use prop::{Footprint, Prop, PropError, Rotation};
 pub use room::{Room, RoomError, WallLoop};
+pub use terrain::{TERRAIN_SLOTS, Terrain};
 pub use track::{Track, TrackError};
 pub use union::{MergeError, joins, merge};

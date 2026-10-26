@@ -11,10 +11,22 @@ use crate::model::{Header, PackEntry};
 const PACK_PREFIX: &str = "res://packs/";
 const DEFAULT_PREFIX: &str = "res://textures/";
 
+/// The assets a map uses. Dungeondraft does not count terrain textures as a
+/// use of its default assets, only as a use of their pack.
+pub struct AssetUse<'a> {
+    pub flagging: &'a [&'a str],
+    pub terrain: &'a [&'a str],
+}
+
 /// Adds the packs of the `used` assets that the header does not declare yet,
 /// and flags the use of default assets.
-pub fn declare_packs(header: &mut Header, used: &[&str], settings: &ExportSettings) {
-    let packs: BTreeSet<&str> = used.iter().filter_map(|asset| pack_id(asset)).collect();
+pub fn declare_packs(header: &mut Header, used: &AssetUse, settings: &ExportSettings) {
+    let packs: BTreeSet<&str> = used
+        .flagging
+        .iter()
+        .chain(used.terrain)
+        .filter_map(|asset| pack_id(asset))
+        .collect();
     let missing: Vec<&str> = packs
         .into_iter()
         .filter(|id| header.asset_manifest.iter().all(|pack| pack.id != *id))
@@ -28,7 +40,11 @@ pub fn declare_packs(header: &mut Header, used: &[&str], settings: &ExportSettin
             .asset_manifest
             .sort_by(|first, second| first.id.cmp(&second.id));
     }
-    if used.iter().any(|asset| asset.starts_with(DEFAULT_PREFIX)) {
+    if used
+        .flagging
+        .iter()
+        .any(|asset| asset.starts_with(DEFAULT_PREFIX))
+    {
         header.uses_default_assets = true;
     }
 }

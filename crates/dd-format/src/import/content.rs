@@ -1,23 +1,19 @@
-//! Floor tiles, props, lights, patterns, paths and caves.
+//! Floor tiles, props, lights, patterns, paths, caves and terrain.
 
 use std::collections::BTreeSet;
 
 use dd_domain::{
-    AssetPath, Cell, CellPosition, Footprint, Glow, Light, Pattern, Polygon, Prop, QuarterTurn,
-    Track,
+    AssetPath, Cell, CellPosition, Footprint, Glow, Light, Pattern, Polygon, Prop, Rotation, Track,
 };
 
 use super::cells::{grid_points, position};
 use super::{FootprintOf, Importer};
-use crate::export::{CELL_SIZE_PX, unpack_cave};
+use crate::export::{CELL_SIZE_PX, slot_textures, unpack_cave, unpack_splat};
 use crate::godot::Vector2;
 use crate::model::{
     Level, Light as LightRecord, Object, Path as PathRecord, Pattern as PatternRecord,
 };
 
-/// Rotations further than this from a quarter turn are reported, in degrees.
-const QUARTER_TURN_TOLERANCE: f64 = 0.5;
-const QUARTER_TURN: f64 = 90.0;
 /// Footprint of objects whose size is unknown, in cells.
 const UNKNOWN_SIDE: f64 = 1.0;
 
@@ -61,7 +57,8 @@ fn import_prop(
     object: &Object,
     footprint_of: FootprintOf,
 ) -> Result<(), String> {
-    let rotation = quarter_turn(importer, object)?;
+    let rotation =
+        Rotation::from_degrees(object.rotation.to_degrees()).map_err(|error| error.to_string())?;
     if object.mirror {
         importer.warn(format!(
             "prop {} is mirrored; mirroring is not kept",
@@ -83,24 +80,6 @@ fn import_prop(
         .add_prop(prop)
         .map(|_| ())
         .map_err(|error| error.to_string())
-}
-
-/// The quarter turn nearest to the object's rotation.
-fn quarter_turn(importer: &mut Importer, object: &Object) -> Result<QuarterTurn, String> {
-    let degrees = object.rotation.to_degrees();
-    let quarters = (degrees / QUARTER_TURN).round();
-    if (degrees - quarters * QUARTER_TURN).abs() > QUARTER_TURN_TOLERANCE {
-        importer.warn(format!(
-            "prop {} is turned by {degrees:.0} degrees; it was rounded to a quarter turn",
-            object.node_id.0
-        ));
-    }
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "a few quarter turns at most"
-    )]
-    let quarter_degrees = (quarters * QUARTER_TURN) as i32;
-    QuarterTurn::from_degrees(quarter_degrees).map_err(|error| error.to_string())
 }
 
 pub fn import_lights(importer: &mut Importer, level: &Level) {
@@ -216,5 +195,23 @@ pub fn import_cave(importer: &mut Importer, level: &Level) {
     for (index, (floor, entrance)) in floor.into_iter().zip(entrance).enumerate() {
         let index = u32::try_from(index).unwrap_or(u32::MAX);
         cave.set(index % columns, index / columns, floor, entrance);
+    }
+}
+
+pub fn import_terrain(importer: &mut Importer, level: &Level) {
+    let Some(weights) = unpack_splat(&level.terrain.splat, importer.map.terrain()) else {
+        importer.warn("the terrain does not fit the map size and is skipped".to_owned());
+        return;
+    };
+    let ground = importer.map.terrain_mut();
+    for (slot, texture) in slot_textures(&level.terrain).into_iter().enumerate() {
+        if let Ok(texture) = AssetPath::new(texture.to_owned()) {
+            ground.set_texture(slot, texture);
+        }
+    }
+    let columns = ground.columns();
+    for (index, weights) in weights.into_iter().enumerate() {
+        let index = u32::try_from(index).unwrap_or(u32::MAX);
+        ground.set_weights(index % columns, index / columns, weights);
     }
 }

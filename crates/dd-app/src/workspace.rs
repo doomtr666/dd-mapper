@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use dd_catalog::{Asset, AssetKind, AssetQuery, Catalog};
 use dd_domain::{
     CellPoint, CellPosition, Door, Footprint, Glow, GridSize, Light, Map, MapError, Partition,
-    Pattern, Prop, QuarterTurn, Room, Track, WallPosition,
+    Pattern, Prop, Room, Rotation, Track, WallPosition,
 };
 
 use crate::assets::resolve;
@@ -279,14 +279,14 @@ impl Workspace {
     }
 
     /// # Errors
-    /// Fails on an unknown map or asset, a rotation that is not a quarter turn,
+    /// Fails on an unknown map or asset, a rotation that is not a number,
     /// or a position outside the map.
     pub fn place_prop(&mut self, map: &str, request: &PropRequest) -> Result<String, AppError> {
         let asset = resolve(&self.catalog, &request.asset, AssetKind::Object)?;
         let prop = Prop {
             asset: asset.path.clone(),
             center: CellPosition::new(request.x, request.y),
-            rotation: QuarterTurn::from_degrees(request.rotation_degrees)?,
+            rotation: Rotation::from_degrees(request.rotation_degrees)?,
             footprint: footprint(asset)?,
             tint: request.color.as_deref().map(parse_color).transpose()?,
         };
@@ -584,7 +584,7 @@ pub(crate) mod tests {
         }
     }
 
-    fn crate_at(x: f64, y: f64, rotation_degrees: i32) -> PropRequest {
+    fn crate_at(x: f64, y: f64, rotation_degrees: f64) -> PropRequest {
         PropRequest {
             asset: CRATE.to_owned(),
             x,
@@ -600,7 +600,7 @@ pub(crate) mod tests {
         let map = workspace.new_map(30, 20).unwrap();
         let green = PropRequest {
             color: Some("33ff33".to_owned()),
-            ..crate_at(5.0, 5.0, 0)
+            ..crate_at(5.0, 5.0, 0.0)
         };
         workspace.place_prop(&map, &green).unwrap();
         assert!(
@@ -611,7 +611,7 @@ pub(crate) mod tests {
         );
         let unknown = PropRequest {
             color: Some("acid".to_owned()),
-            ..crate_at(8.0, 5.0, 0)
+            ..crate_at(8.0, 5.0, 0.0)
         };
         assert_eq!(
             workspace.place_prop(&map, &unknown),
@@ -776,23 +776,34 @@ pub(crate) mod tests {
         let (mut workspace, _) = workspace();
         let map = workspace.new_map(30, 20).unwrap();
         assert_eq!(
-            workspace.place_prop(&map, &crate_at(5.0, 5.0, -90)),
+            workspace.place_prop(&map, &crate_at(5.0, 5.0, -90.0)),
             Ok("P0".to_owned())
         );
         assert!(workspace.describe(&map).unwrap().contains(
             "P0: Container_Large_Metal_Crate_Green at (5, 5), 270 degrees, 2 x 1.5 cells"
         ));
-        assert_eq!(
-            workspace.place_prop(&map, &crate_at(5.0, 5.0, 45)),
-            Err(AppError::Prop(PropError::NotAQuarterTurn(45)))
+        workspace
+            .place_prop(&map, &crate_at(12.0, 5.0, 37.5))
+            .unwrap();
+        assert!(
+            workspace
+                .describe(&map)
+                .unwrap()
+                .contains("P1: Container_Large_Metal_Crate_Green at (12, 5), 37.5 degrees")
         );
+        assert!(matches!(
+            workspace.place_prop(&map, &crate_at(5.0, 5.0, f64::NAN)),
+            Err(AppError::Prop(PropError::InvalidRotation(_)))
+        ));
     }
 
     #[test]
     fn props_can_be_removed_to_be_placed_again() {
         let (mut workspace, _) = workspace();
         let map = workspace.new_map(30, 20).unwrap();
-        workspace.place_prop(&map, &crate_at(5.0, 5.0, 90)).unwrap();
+        workspace
+            .place_prop(&map, &crate_at(5.0, 5.0, 90.0))
+            .unwrap();
         assert_eq!(workspace.remove_prop(&map, "P0"), Ok(()));
         assert!(!workspace.describe(&map).unwrap().contains("P0"));
         assert!(matches!(

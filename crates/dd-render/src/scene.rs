@@ -280,7 +280,7 @@ fn door_frame(map: &Map, door: &Door) -> Option<(CellPosition, (f64, f64))> {
 mod tests {
     use dd_domain::{
         AssetPath, CellPoint, CellPosition, Door, Footprint, Glow, GridSize, Light, Map, Partition,
-        Pattern, Polygon, Prop, QuarterTurn, Room, WallLoop, WallPosition, WallRef,
+        Pattern, Polygon, Prop, Room, Rotation, WallLoop, WallPosition, WallRef,
     };
 
     use super::render;
@@ -322,7 +322,7 @@ mod tests {
         map.add_prop(Prop {
             asset: asset("crate.webp"),
             center: CellPosition::new(5.5, 2.5),
-            rotation: QuarterTurn::Deg0,
+            rotation: Rotation::NONE,
             footprint: Footprint::new(1.0, 1.0).unwrap(),
             tint: None,
         })
@@ -548,7 +548,7 @@ mod tests {
         map.add_prop(Prop {
             asset: asset("crate.webp"),
             center: CellPosition::new(2.0, 2.0),
-            rotation: QuarterTurn::Deg0,
+            rotation: Rotation::NONE,
             footprint: Footprint::new(1.01, 0.63).unwrap(),
             tint: None,
         })

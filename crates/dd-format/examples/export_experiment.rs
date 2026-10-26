@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use dd_domain::{
-    AssetPath, CellPoint, CellPosition, Door, Footprint, GridSize, Map, Polygon, Prop, QuarterTurn,
-    Room, WallLoop, WallPosition, WallRef,
+    AssetPath, CellPoint, CellPosition, Door, Footprint, GridSize, Map, Polygon, Prop, Room,
+    Rotation, WallLoop, WallPosition, WallRef,
 };
 use dd_format::export::{ExportSettings, export_map};
 use dd_format::model::MapFile;
@@ -71,7 +71,7 @@ fn experiment_map() -> Result<Map, Box<dyn Error>> {
 /// Two large Grimdorx crates (452 x 390 px), the second one turned a quarter.
 fn add_crates(map: &mut Map) -> Result<(), Box<dyn Error>> {
     let footprint = Footprint::new(452.0 / 256.0, 390.0 / 256.0)?;
-    for (x, rotation) in [(12.5, QuarterTurn::Deg0), (14.5, QuarterTurn::Deg90)] {
+    for (x, rotation) in [(12.5, Rotation::NONE), (14.5, Rotation::QUARTER)] {
         map.add_prop(Prop {
             asset: AssetPath::new(CRATE)?,
             center: CellPosition::new(x, 3.5),

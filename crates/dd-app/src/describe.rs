@@ -2,7 +2,7 @@
 
 use dd_domain::{
     AssetPath, Door, DoorId, Light, LightId, Map, Partition, PartitionId, Pattern, PatternId,
-    Polygon, Prop, PropId, Room, RoomId, Track, TrackId,
+    Polygon, Prop, PropId, Room, RoomId, TERRAIN_SLOTS, Track, TrackId,
 };
 
 use crate::ids::{
@@ -16,6 +16,14 @@ pub fn describe(map_label: &str, map: &Map) -> String {
     let mut text = format!("{map_label}: {} x {} cells\n", grid.width(), grid.height());
     if let Some(background) = map.background() {
         text.push_str(&background_line(background));
+    }
+    let painted: Vec<&str> = (1..TERRAIN_SLOTS)
+        .filter_map(|slot| map.terrain().texture(slot))
+        .filter(|texture| map.terrain().used_textures().any(|used| used == *texture))
+        .map(asset_name)
+        .collect();
+    if !painted.is_empty() {
+        text.push_str(&terrain_line(&painted));
     }
     if let Some(argb) = map.ambient_light() {
         text.push_str(&ambient_line(argb));
@@ -82,6 +90,10 @@ fn cave_line(map: &Map) -> String {
         ""
     };
     format!("Cave: about {cells} cells of floor{entrances}\n")
+}
+
+fn terrain_line(painted: &[&str]) -> String {
+    format!("Terrain: {}\n", painted.join(", "))
 }
 
 fn ambient_line(argb: u32) -> String {
@@ -227,7 +239,7 @@ fn prop_line(id: PropId, prop: &Prop) -> String {
         asset_name(&prop.asset),
         prop.center.x,
         prop.center.y,
-        prop.rotation.degrees(),
+        hundredths(prop.rotation.degrees()),
         hundredths(prop.footprint.width()),
         hundredths(prop.footprint.height()),
     )
@@ -247,8 +259,8 @@ fn asset_name(asset: &AssetPath) -> &str {
 #[cfg(test)]
 mod tests {
     use dd_domain::{
-        AssetPath, CellPoint, CellPosition, Door, Footprint, GridSize, Map, Polygon, Prop,
-        QuarterTurn, Room, WallLoop, WallPosition, WallRef,
+        AssetPath, CellPoint, CellPosition, Door, Footprint, GridSize, Map, Polygon, Prop, Room,
+        Rotation, WallLoop, WallPosition, WallRef,
     };
 
     use super::describe;
@@ -289,7 +301,7 @@ mod tests {
         map.add_prop(Prop {
             asset: asset("res://packs/X/textures/objects/Crate.webp"),
             center: CellPosition::new(12.5, 3.5),
-            rotation: QuarterTurn::Deg90,
+            rotation: Rotation::QUARTER,
             footprint: Footprint::new(2.0, 1.5).unwrap(),
             tint: None,
         })
@@ -313,7 +325,7 @@ mod tests {
         map.add_prop(Prop {
             asset: asset("res://packs/X/textures/objects/Console.webp"),
             center: CellPosition::new(8.0, 3.5),
-            rotation: QuarterTurn::Deg0,
+            rotation: Rotation::NONE,
             footprint: Footprint::new(0.656_25, 0.8125).unwrap(),
             tint: None,
         })

@@ -38,7 +38,8 @@ fn misplaced_props(map: &Map) -> Vec<String> {
             let in_room = map
                 .rooms()
                 .any(|(_, room)| room.outline().contains_position(prop.center));
-            (!in_room && !map.cave().is_floor_at(prop.center))
+            let on_open_ground = map.background().is_some();
+            (!in_room && !on_open_ground && !map.cave().is_floor_at(prop.center))
                 .then(|| format!("prop {} is outside every room and cave", prop_label(id)))
         })
         .collect()
@@ -129,8 +130,8 @@ pub(crate) fn boxes_overlap(
 #[cfg(test)]
 mod tests {
     use dd_domain::{
-        AssetPath, CellPoint, CellPosition, Door, Footprint, GridSize, Map, Polygon, Prop,
-        QuarterTurn, Room, RoomId, WallLoop, WallPosition, WallRef,
+        AssetPath, CellPoint, CellPosition, Door, Footprint, GridSize, Map, Polygon, Prop, Room,
+        RoomId, Rotation, WallLoop, WallPosition, WallRef,
     };
 
     use super::validate;
@@ -171,7 +172,7 @@ mod tests {
         map.add_prop(Prop {
             asset: asset("crate.webp"),
             center: CellPosition::new(x, y),
-            rotation: QuarterTurn::Deg0,
+            rotation: Rotation::NONE,
             footprint: Footprint::new(1.0, 1.0).unwrap(),
             tint: None,
         })
@@ -223,6 +224,16 @@ mod tests {
         add_prop(&mut map, 9.0, 2.0);
         add_prop(&mut map, 6.3, 2.0);
         assert_eq!(validate(&map), ["prop P1 crosses a wall or a pillar"]);
+    }
+
+    #[test]
+    fn props_on_open_ground_are_fine_once_the_ground_is_chosen() {
+        let (mut map, room) = map_with_room();
+        add_door(&mut map, room);
+        add_prop(&mut map, 10.5, 10.5);
+        assert_eq!(validate(&map), ["prop P0 is outside every room and cave"]);
+        map.set_background(asset("rockrete.png"));
+        assert_eq!(validate(&map), Vec::<String>::new());
     }
 
     #[test]

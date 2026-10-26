@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     AssetPath, CaveGrid, Cell, CellPoint, CellPosition, GridSize, Light, MergeError, Partition,
-    Pattern, Polygon, Prop, Room, Segment, Track, WallLoop, joins, merge,
+    Pattern, Polygon, Prop, Room, Segment, Terrain, Track, WallLoop, joins, merge,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -107,8 +107,8 @@ pub struct Map {
     patterns: Vec<(PatternId, Pattern)>,
     tracks: Vec<(TrackId, Track)>,
     cave: CaveGrid,
-    /// Terrain texture covering the whole ground, under rooms.
-    background: Option<AssetPath>,
+    /// The ground: the background and the textures painted over it.
+    terrain: Terrain,
     /// ARGB light everywhere, before lights add theirs.
     ambient_light: Option<u32>,
     next_room_id: u32,
@@ -134,7 +134,7 @@ impl Map {
             patterns: Vec::new(),
             tracks: Vec::new(),
             cave: CaveGrid::new(grid),
-            background: None,
+            terrain: Terrain::new(grid),
             ambient_light: None,
             next_room_id: 0,
             next_door_id: 0,
@@ -491,6 +491,15 @@ impl Map {
         &mut self.cave
     }
 
+    #[must_use]
+    pub fn terrain(&self) -> &Terrain {
+        &self.terrain
+    }
+
+    pub fn terrain_mut(&mut self) -> &mut Terrain {
+        &mut self.terrain
+    }
+
     pub fn set_ambient_light(&mut self, argb: u32) {
         self.ambient_light = Some(argb);
     }
@@ -500,13 +509,14 @@ impl Map {
         self.ambient_light
     }
 
+    /// Covers the ground with `terrain`, the first texture of the terrain.
     pub fn set_background(&mut self, terrain: AssetPath) {
-        self.background = Some(terrain);
+        self.terrain.set_texture(0, terrain);
     }
 
     #[must_use]
     pub fn background(&self) -> Option<&AssetPath> {
-        self.background.as_ref()
+        self.terrain.texture(0)
     }
 
     /// Adds a track; like in Dungeondraft, it may run off the edges of the map.
@@ -551,7 +561,7 @@ impl Map {
             .chain(lights)
             .chain(patterns)
             .chain(tracks)
-            .chain(self.background.iter())
+            .chain(self.terrain.used_textures())
     }
 
     /// Floor tileset of every painted cell, column by column.
@@ -587,7 +597,7 @@ mod tests {
     };
     use crate::{
         AssetPath, Cell, CellPoint, CellPosition, Footprint, Glow, GridSize, Light, Partition,
-        Pattern, Polygon, Prop, QuarterTurn, Room, Track, WallLoop,
+        Pattern, Polygon, Prop, Room, Rotation, Track, WallLoop,
     };
 
     fn map() -> Map {
@@ -743,7 +753,7 @@ mod tests {
         Prop {
             asset: AssetPath::new("crate.webp").unwrap(),
             center: CellPosition::new(x, y),
-            rotation: QuarterTurn::Deg0,
+            rotation: Rotation::NONE,
             footprint: Footprint::new(1.0, 1.0).unwrap(),
             tint: None,
         }
@@ -878,6 +888,19 @@ mod tests {
         assert_eq!(map.ambient_light(), None);
         map.set_ambient_light(0xff40_4858);
         assert_eq!(map.ambient_light(), Some(0xff40_4858));
+    }
+
+    #[test]
+    fn the_background_is_the_first_terrain_texture() {
+        let mut map = map();
+        let rock = AssetPath::new("rock.png").unwrap();
+        map.set_background(rock.clone());
+        assert_eq!(map.terrain().texture(0), Some(&rock));
+        let ash = AssetPath::new("ash.png").unwrap();
+        map.terrain_mut().set_texture(1, ash.clone());
+        assert!(!map.assets().any(|asset| *asset == ash));
+        map.terrain_mut().paint(1, |_| 1.0);
+        assert!(map.assets().any(|asset| *asset == ash));
     }
 
     #[test]

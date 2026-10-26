@@ -28,7 +28,7 @@ use crate::params::{
     DEFAULT_PIXELS_PER_CELL, DoorAddParams, FloorPaintParams, LayoutGenerateParams, LightAddParams,
     MapAmbientParams, MapBackgroundParams, MapIdParams, MapNewParams, MapOpenParams,
     MapPreviewParams, MapSaveParams, PathAddParams, PatternAddParams, PropPlaceParams,
-    PropRemoveParams, PropScatterParams, RoomAddParams, WallAddParams,
+    PropRemoveParams, PropScatterParams, RoomAddParams, TerrainPaintParams, WallAddParams,
 };
 
 const SERVER_NAME: &str = "dd-mapper";
@@ -100,6 +100,17 @@ ship_deck (a hab block with a bow). Returns the map_id; then furnish it."
     }
 
     #[tool(
+        description = "Paint a terrain texture (kind terrain) over the ground, fading into \
+what lies around: scorched earth round a blast, ash drifts, mud, slag, a worn trail (tunnel \
+shape). The background stays the first texture; a map blends four at most."
+    )]
+    fn terrain_paint(&self, Parameters(params): Parameters<TerrainPaintParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        let painted = self.with_workspace(|workspace| workspace.paint_terrain(&map, &request));
+        reply(painted.map(|samples| format!("Painted about {} cells.", cells(samples))))
+    }
+
+    #[tool(
         description = "Grow a network of caverns over a rectangle of cells, with natural \
 rock walls; every part can be reached. Combine it with cave_carve to add chambers and \
 tunnels, and cave_entrance where paths come in."
@@ -168,8 +179,9 @@ a free-standing wall (W0), at the wall point nearest to (x, y). Returns the door
     }
 
     #[tool(
-        description = "Place an object centered on (x, y), turned by 0, 90, 180 or 270 \
-degrees. Its footprint is the asset's real size. Returns the prop id."
+        description = "Place an object centered on (x, y), turned clockwise by any angle in \
+degrees (along a curve, a ring, a diagonal). Its footprint is the asset's real size. Returns \
+the prop id."
     )]
     fn prop_place(&self, Parameters(params): Parameters<PropPlaceParams>) -> CallToolResult {
         let (map, request) = params.into_request();

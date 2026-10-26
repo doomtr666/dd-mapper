@@ -13,6 +13,7 @@ mod patterns;
 mod pixels;
 mod portal;
 mod shapes;
+mod terrain;
 mod tiles;
 mod tracks;
 mod walls;
@@ -30,10 +31,12 @@ use self::ground::{blank_cave, blank_terrain};
 use self::lights::build_light;
 use self::node_ids::NodeIdAllocator;
 use self::objects::build_object;
-use self::packs::declare_packs;
+use self::packs::{AssetUse, declare_packs};
 use self::patterns::build_pattern;
 use self::portal::{PortalSpec, build_portal};
 use self::shapes::build_shapes;
+use self::terrain::write_terrain;
+pub use self::terrain::{slot_textures, unpack_splat};
 use self::tiles::build_tiles;
 use self::tracks::build_path;
 use self::walls::{build_free_wall, build_wall};
@@ -143,15 +146,26 @@ pub fn export_map(
         reset_ground(level, map.grid());
     }
     write_cave(&mut level.cave, map.cave());
-    if let Some(background) = map.background() {
-        cover_terrain(level, map.grid(), background);
-    }
+    write_terrain(&mut level.terrain, map.terrain());
     if let Some(argb) = map.ambient_light() {
         set_ambient_light(level, Color(argb));
     }
     let cave_texture = (!map.cave().is_empty()).then(|| level.cave.texture.clone());
-    let mut used: Vec<&str> = map.assets().map(AssetPath::as_str).collect();
-    used.extend(cave_texture.as_deref());
+    let terrain: Vec<&str> = map
+        .terrain()
+        .used_textures()
+        .map(AssetPath::as_str)
+        .collect();
+    let mut flagging: Vec<&str> = map
+        .assets()
+        .map(AssetPath::as_str)
+        .filter(|asset| !terrain.contains(asset))
+        .collect();
+    flagging.extend(cave_texture.as_deref());
+    let used = AssetUse {
+        flagging: &flagging,
+        terrain: &terrain,
+    };
     if let Some(header) = file.header_mut() {
         declare_packs(header, &used, settings);
     }
@@ -192,13 +206,6 @@ fn set_ambient_light(level: &mut Level, ambient_light: Color) {
             }));
         }
     }
-}
-
-/// Paints the whole terrain with `background`.
-fn cover_terrain(level: &mut Level, grid: GridSize, background: &AssetPath) {
-    let mut terrain = blank_terrain(grid, &level.terrain);
-    background.as_str().clone_into(&mut terrain.texture_1);
-    *level.terrain = terrain;
 }
 
 fn write_level(level: &mut Level, map: &Map, nodes: Nodes) {
@@ -350,7 +357,7 @@ mod tests {
         map.add_prop(dd_domain::Prop {
             asset: AssetPath::new("res://textures/objects/crate.png").unwrap(),
             center: dd_domain::CellPosition::new(2.5, 0.5),
-            rotation: dd_domain::QuarterTurn::Deg0,
+            rotation: dd_domain::Rotation::NONE,
             footprint: dd_domain::Footprint::new(1.0, 1.0).unwrap(),
             tint: None,
         })
@@ -368,7 +375,7 @@ mod tests {
             asset: AssetPath::new(format!("res://packs/{pack}/textures/objects/crate.webp"))
                 .unwrap(),
             center: dd_domain::CellPosition::new(2.5, 0.5),
-            rotation: dd_domain::QuarterTurn::Deg0,
+            rotation: dd_domain::Rotation::NONE,
             footprint: dd_domain::Footprint::new(1.0, 1.0).unwrap(),
             tint: None,
         }
@@ -381,6 +388,13 @@ mod tests {
         map.add_prop(crate_from("LOREAP01")).unwrap();
         map.add_prop(crate_from("LOREGD01")).unwrap();
         map.set_background(AssetPath::new("res://textures/terrain/terrain_void.png").unwrap());
+        let terrain_only = export_map(&map, &template(), &ExportSettings::default()).unwrap();
+        assert!(!terrain_only.header().unwrap().uses_default_assets);
+        map.add_prop(dd_domain::Prop {
+            asset: AssetPath::new("res://textures/objects/crate.png").unwrap(),
+            ..crate_from("LOREGD01")
+        })
+        .unwrap();
         let starpunx = PackManifest {
             name: "LORE Starpunx A 3.16".to_owned(),
             version: "3.16".to_owned(),
@@ -476,12 +490,22 @@ mod tests {
     }
 
     #[test]
-    fn keeps_the_painted_terrain_and_cave_of_a_template_of_the_same_size() {
+    fn the_map_terrain_replaces_the_template_one() {
         let template = template();
-        let painted = template.world().levels["0"].terrain.splat.clone();
         let map = Map::new(GridSize::new(48, 27).unwrap());
         let exported = export_map(&map, &template, &ExportSettings::default()).unwrap();
-        assert_eq!(exported.world().levels["0"].terrain.splat, painted);
+        let terrain = &exported.world().levels["0"].terrain;
+        assert!(
+            terrain
+                .splat
+                .0
+                .chunks(4)
+                .all(|pixel| pixel == [255, 0, 0, 0])
+        );
+        assert_eq!(
+            terrain.texture_2,
+            template.world().levels["0"].terrain.texture_2
+        );
     }
 
     #[test]

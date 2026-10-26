@@ -16,9 +16,9 @@ const MAX_STRAY: f64 = 0.45;
 /// Waves summed into rough walls.
 const WAVES: u32 = 4;
 
-/// What to dig, in cells.
+/// An area with natural edges, in cells: what caves dig and terrain paints.
 #[derive(Debug, Clone, PartialEq)]
-pub enum CaveShape {
+pub enum NaturalShape {
     /// A chamber around `(x, y)`.
     Chamber { x: f64, y: f64, radius: f64 },
     /// A gallery `width` cells wide along `points`.
@@ -30,7 +30,7 @@ pub enum CaveShape {
 /// Digs (or fills back) a cave shape.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CaveRequest {
-    pub shape: CaveShape,
+    pub shape: NaturalShape,
     /// Fill the shape with rock instead of digging it.
     pub fill: bool,
     /// From 0 (smooth) to 1 (very jagged) walls for chambers and tunnels.
@@ -77,8 +77,7 @@ impl Workspace {
     /// # Errors
     /// Fails on an unknown map or an invalid shape.
     pub fn carve_cave(&mut self, map: &str, request: &CaveRequest) -> Result<usize, AppError> {
-        let roughness = request.roughness.clamp(0.0, 1.0);
-        let inside = region(&request.shape, roughness, request.seed)?;
+        let inside = region(&request.shape, request.roughness, request.seed)?;
         Ok(self.map_mut(map)?.cave_mut().dig(inside, !request.fill))
     }
 
@@ -87,7 +86,11 @@ impl Workspace {
     ///
     /// # Errors
     /// Fails on an unknown map or an invalid shape.
-    pub fn open_cave_entrance(&mut self, map: &str, shape: &CaveShape) -> Result<usize, AppError> {
+    pub fn open_cave_entrance(
+        &mut self,
+        map: &str,
+        shape: &NaturalShape,
+    ) -> Result<usize, AppError> {
         let inside = region(shape, 0.0, 0)?;
         Ok(self.map_mut(map)?.cave_mut().mark_entrance(inside, true))
     }
@@ -95,23 +98,36 @@ impl Workspace {
 
 type Region = Box<dyn Fn(CellPosition) -> bool>;
 
+/// How far inside a shape a position lies, in cells: positive inside, zero on
+/// its edge, negative outside.
+pub(crate) type Margin = Box<dyn Fn(CellPosition) -> f64>;
+
 /// The positions inside `shape`, its walls strayed by `roughness`.
-fn region(shape: &CaveShape, roughness: f64, seed: u64) -> Result<Region, AppError> {
-    let stray = roughness * MAX_STRAY;
+fn region(shape: &NaturalShape, roughness: f64, seed: u64) -> Result<Region, AppError> {
+    let margin = margin(shape, roughness, seed)?;
+    Ok(Box::new(move |position: CellPosition| {
+        margin(position) >= 0.0
+    }))
+}
+
+/// The margin of `shape`, its edges strayed by `roughness`. Areas are exact:
+/// one cell in or out.
+pub(crate) fn margin(shape: &NaturalShape, roughness: f64, seed: u64) -> Result<Margin, AppError> {
+    let stray = roughness.clamp(0.0, 1.0) * MAX_STRAY;
     match shape {
-        &CaveShape::Chamber { x, y, radius } => {
+        &NaturalShape::Chamber { x, y, radius } => {
             positive(radius, "a chamber radius")?;
             let wobble = Wobble::around(seed);
             Ok(Box::new(move |position: CellPosition| {
                 let (dx, dy) = (position.x - x, position.y - y);
                 let reach = radius * (1.0 + stray * wobble.at(dy.atan2(dx)));
-                dx.hypot(dy) <= reach
+                reach - dx.hypot(dy)
             }))
         }
-        CaveShape::Tunnel { points, width } => {
+        NaturalShape::Tunnel { points, width } => {
             positive(*width, "a tunnel width")?;
             if points.len() < 2 {
-                return Err(AppError::InvalidCaveShape(
+                return Err(AppError::InvalidNaturalShape(
                     "a tunnel needs at least 2 points".to_owned(),
                 ));
             }
@@ -120,13 +136,17 @@ fn region(shape: &CaveShape, roughness: f64, seed: u64) -> Result<Region, AppErr
             let wobble = Wobble::along(seed);
             Ok(Box::new(move |position: CellPosition| {
                 let (distance, along) = nearest_on_line(&line, position);
-                distance <= half * (1.0 + stray * wobble.at(along))
+                half * (1.0 + stray * wobble.at(along)) - distance
             }))
         }
-        CaveShape::Area(shape) => {
+        NaturalShape::Area(shape) => {
             let area = shape.to_polygon()?;
             Ok(Box::new(move |position: CellPosition| {
-                area.contains_position(position)
+                if area.contains_position(position) {
+                    1.0
+                } else {
+                    -1.0
+                }
             }))
         }
     }
@@ -156,7 +176,7 @@ fn positive(value: f64, what: &str) -> Result<(), AppError> {
     if value.is_finite() && value > 0.0 {
         return Ok(());
     }
-    Err(AppError::InvalidCaveShape(format!(
+    Err(AppError::InvalidNaturalShape(format!(
         "{what} must be positive, got {value}"
     )))
 }
@@ -227,14 +247,14 @@ impl Wobble {
 mod tests {
     use dd_domain::CellPosition;
 
-    use super::{CaveNetwork, CaveRequest, CaveShape};
+    use super::{CaveNetwork, CaveRequest, NaturalShape};
     use crate::assets::tests::CRATE;
     use crate::workspace::tests::workspace;
     use crate::{AppError, PropRequest, Shape, Workspace};
 
     fn chamber(radius: f64, roughness: f64, seed: u64) -> CaveRequest {
         CaveRequest {
-            shape: CaveShape::Chamber {
+            shape: NaturalShape::Chamber {
                 x: 10.0,
                 y: 8.0,
                 radius,
@@ -301,7 +321,7 @@ mod tests {
         let (mut workspace, _) = workspace();
         let map = workspace.new_map(30, 20).unwrap();
         let tunnel = CaveRequest {
-            shape: CaveShape::Tunnel {
+            shape: NaturalShape::Tunnel {
                 points: vec![(2.0, 2.0), (12.0, 4.0), (20.0, 15.0)],
                 width: 2.0,
             },
@@ -338,7 +358,7 @@ mod tests {
         let (mut workspace, _) = workspace();
         let map = workspace.new_map(30, 20).unwrap();
         let mine = CaveRequest {
-            shape: CaveShape::Area(Shape::Rectangle {
+            shape: NaturalShape::Area(Shape::Rectangle {
                 x: 2,
                 y: 2,
                 width: 4,
@@ -348,7 +368,7 @@ mod tests {
         };
         workspace.carve_cave(&map, &mine).unwrap();
         assert!((floor_cells(&workspace, &map) - 12.0).abs() < 2.5);
-        let opening = CaveShape::Chamber {
+        let opening = NaturalShape::Chamber {
             x: 6.0,
             y: 3.5,
             radius: 0.6,
@@ -366,7 +386,7 @@ mod tests {
             asset: CRATE.to_owned(),
             x: 10.0,
             y: 8.0,
-            rotation_degrees: 0,
+            rotation_degrees: 0.0,
             color: None,
         };
         workspace.place_prop(&map, &boulder).unwrap();
@@ -415,7 +435,7 @@ mod tests {
         let map = workspace.new_map(30, 20).unwrap();
         assert!(matches!(
             workspace.carve_cave(&map, &chamber(0.0, 0.0, 1)),
-            Err(AppError::InvalidCaveShape(_))
+            Err(AppError::InvalidNaturalShape(_))
         ));
     }
 }

@@ -1,6 +1,6 @@
-use std::f64::consts::{FRAC_PI_2, PI};
+use std::f64::consts::PI;
 
-use dd_domain::{Prop, QuarterTurn};
+use dd_domain::{Prop, Rotation};
 
 use super::pixels::CELL_SIZE_PX;
 use crate::godot::Vector2;
@@ -26,23 +26,23 @@ pub fn build_object(prop: &Prop, node_id: NodeId) -> Object {
 }
 
 /// Radians, clockwise on screen, in `[-π, π[` like Dungeondraft writes them.
-fn radians(rotation: QuarterTurn) -> f64 {
-    match rotation {
-        QuarterTurn::Deg0 => 0.0,
-        QuarterTurn::Deg90 => FRAC_PI_2,
-        QuarterTurn::Deg180 => -PI,
-        QuarterTurn::Deg270 => -FRAC_PI_2,
+fn radians(rotation: Rotation) -> f64 {
+    let radians = rotation.degrees().to_radians();
+    if radians >= PI {
+        radians - 2.0 * PI
+    } else {
+        radians
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use dd_domain::{AssetPath, CellPosition, Footprint, Prop, QuarterTurn};
+    use dd_domain::{AssetPath, CellPosition, Footprint, Prop, Rotation};
 
     use super::build_object;
     use crate::model::{MapFile, NodeId};
 
-    fn prop(center: CellPosition, rotation: QuarterTurn) -> Prop {
+    fn prop(center: CellPosition, rotation: Rotation) -> Prop {
         Prop {
             asset: AssetPath::new(
                 "res://packs/LOREGD01/textures/objects/[LORE] Buildings/[LORE] Buildings - Greebles/Decor_Aquila_Ancient.webp",
@@ -70,7 +70,7 @@ mod tests {
             .map(|object| (**object).clone())
             .unwrap();
         let object = build_object(
-            &prop(CellPosition::new(37.5, 23.5), QuarterTurn::Deg90),
+            &prop(CellPosition::new(37.5, 23.5), Rotation::QUARTER),
             NodeId(0x3d),
         );
         assert_eq!(as_written(&object), as_written(&expected));
@@ -92,7 +92,7 @@ mod tests {
             asset: AssetPath::new("res://textures/objects/military/blood/blood_water_stain_02.png")
                 .unwrap(),
             tint: Some(0xfff3_a768),
-            ..prop(CellPosition::new(32.0, 22.5), QuarterTurn::Deg0)
+            ..prop(CellPosition::new(32.0, 22.5), Rotation::NONE)
         };
         let object = build_object(&stain, NodeId(0x124));
         assert_eq!(as_written(&object), as_written(&expected));
@@ -102,10 +102,12 @@ mod tests {
     fn writes_rotations_like_dungeondraft() {
         let center = CellPosition::new(1.0, 1.0);
         let rotations: Vec<String> = [
-            QuarterTurn::Deg0,
-            QuarterTurn::Deg90,
-            QuarterTurn::Deg180,
-            QuarterTurn::Deg270,
+            Rotation::NONE,
+            Rotation::QUARTER,
+            Rotation::HALF,
+            Rotation::THREE_QUARTERS,
+            Rotation::from_degrees(30.0).unwrap(),
+            Rotation::from_degrees(300.0).unwrap(),
         ]
         .into_iter()
         .map(|turn| {
@@ -113,6 +115,16 @@ mod tests {
             crate::json::to_godot_json(&serde_json::json!(rotation))
         })
         .collect();
-        assert_eq!(rotations, ["0", "1.570796", "-3.141593", "-1.570796"]);
+        assert_eq!(
+            rotations,
+            [
+                "0",
+                "1.570796",
+                "-3.141593",
+                "-1.570796",
+                "0.523599",
+                "-1.047198"
+            ]
+        );
     }
 }

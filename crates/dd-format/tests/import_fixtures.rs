@@ -98,6 +98,23 @@ fn reexports_the_cave_of_the_sample_bit_for_bit() {
 }
 
 #[test]
+fn reexports_painted_terrain_onto_another_template() {
+    let painted = MapFile::parse(&common::read_fixture("test2.dungeondraft_map")).unwrap();
+    let imported = import_map(&painted, &no_footprints).unwrap();
+    let other = MapFile::parse(&common::read_fixture("test.dungeondraft_map")).unwrap();
+    let exported = export_map(&imported.map, &other, &ExportSettings::default()).unwrap();
+    let terrain = |file: &MapFile| {
+        let terrain = &file.world().levels["0"].terrain;
+        (
+            terrain.splat.clone(),
+            terrain.texture_1.clone(),
+            terrain.texture_2.clone(),
+        )
+    };
+    assert_eq!(terrain(&exported), terrain(&painted));
+}
+
+#[test]
 fn imports_the_custom_colors_of_objects() {
     let map = import("cave_and_paths.dungeondraft_map").map;
     let tints: Vec<u32> = map.props().filter_map(|(_, prop)| prop.tint).collect();
