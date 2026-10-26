@@ -33,6 +33,8 @@ pub struct LayoutRequest {
     pub min_room: u32,
     /// Free cells around the building: room for engines, a yard...
     pub margin: u32,
+    /// For `Bsp`: keep a large hall between two wings of rooms.
+    pub hall: bool,
     /// The same seed draws the same building.
     pub seed: u64,
     /// Asset path of the floor tileset.
@@ -81,6 +83,7 @@ impl LayoutRequest {
                 height,
                 min_room,
                 margin,
+                hall: self.hall,
                 seed,
             }),
             Generator::HabBlock | Generator::ShipDeck => {
@@ -196,6 +199,7 @@ mod tests {
             height: 14,
             min_room: 3,
             margin: 1,
+            hall: false,
             seed: 42,
             floor: FLOOR.to_owned(),
             wall: WALL.to_owned(),
@@ -222,6 +226,19 @@ mod tests {
             assert_eq!(report.doors, report.areas - 1 + entrances, "{generator:?}");
             assert_eq!(workspace.validate(&report.map), Ok(vec![]), "{generator:?}");
         }
+    }
+
+    #[test]
+    fn halls_take_half_a_partitioned_building() {
+        let (mut workspace, _) = workspace();
+        let hall = LayoutRequest {
+            hall: true,
+            ..request(Generator::Bsp)
+        };
+        let report = workspace.generate(&hall).unwrap();
+        assert_eq!(workspace.validate(&report.map), Ok(vec![]));
+        let description = workspace.describe(&report.map).unwrap();
+        assert!(description.contains("D0:"), "{description}");
     }
 
     #[test]

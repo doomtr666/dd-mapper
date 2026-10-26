@@ -318,6 +318,10 @@ pub struct LayoutGenerateParams {
     /// Free cells around the building, 1 by default: 4 leaves room for engines
     /// behind a ship deck.
     pub margin: Option<u32>,
+    /// For bsp: keep a large hall, half the building, between two wings of
+    /// small rooms; a production floor, a chapel nave, a mess. Off by default.
+    #[serde(default)]
+    pub hall: bool,
     /// The same seed draws the same building; change it for another one.
     #[serde(default)]
     pub seed: u64,
@@ -337,6 +341,7 @@ impl From<LayoutGenerateParams> for LayoutRequest {
             height: params.height,
             min_room: params.min_room.unwrap_or(DEFAULT_MIN_ROOM),
             margin: params.margin.unwrap_or(DEFAULT_MARGIN),
+            hall: params.hall,
             seed: params.seed,
             floor: params.floor,
             wall: params.wall,
@@ -365,6 +370,10 @@ pub struct PropScatterParams {
     /// The same seed strews the same way; change it for another layout.
     #[serde(default)]
     pub seed: u64,
+    /// Line the props along the walls, backs to the wall and facing the room:
+    /// lockers, shelves, barrels, pipes, consoles. Off by default.
+    #[serde(default)]
+    pub along_walls: bool,
 }
 
 impl PropScatterParams {
@@ -374,6 +383,7 @@ impl PropScatterParams {
             area: self.shape.into(),
             count: self.count,
             seed: self.seed,
+            along_walls: self.along_walls,
         };
         (self.map_id, request)
     }
@@ -403,4 +413,12 @@ impl FloorPaintParams {
         };
         (self.map_id, request)
     }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct MapAmbientParams {
+    pub map_id: String,
+    /// `RRGGBB` or `AARRGGBB`: white is full daylight, `404858` a dim underhive,
+    /// `202838` the dark of a derelict.
+    pub color: String,
 }

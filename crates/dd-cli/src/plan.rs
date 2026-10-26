@@ -6,6 +6,7 @@
 //! wall = "res://packs/.../Wall_Underhive_Industrial.webp"
 //! door = "res://packs/.../Door_Underhive_Industrial.webp"
 //! background = "res://textures/terrain/terrain_void.png"   # the ground around rooms
+//! ambient = "404858"           # light everywhere; dim it so that lights matter
 //!
 //! [map]                        # a blank map...
 //! width = 30
@@ -18,6 +19,7 @@
 //! # seed = 7
 //! # min_room = 3
 //! # margin = 1                 # free cells around the building
+//! # hall = false               # bsp: a large hall between two wings of rooms
 //!
 //! [[room]]                     # R0, R1... in order
 //! shape = { type = "rectangle", x = 1, y = 1, width = 12, height = 8 }
@@ -50,6 +52,7 @@
 //! shape = { type = "rectangle", x = 1, y = 1, width = 12, height = 8 }
 //! count = 15
 //! seed = 3
+//! along_walls = false          # true lines them along the walls, facing the room
 //!
 //! [[pattern]]
 //! asset = "res://packs/.../Tileset_AncientGothic_Quarters_Sewer_Open.webp"
@@ -99,6 +102,8 @@ struct Style {
     door: Option<String>,
     /// Terrain texture covering the whole ground.
     background: Option<String>,
+    /// `RRGGBB` or `AARRGGBB` light everywhere, before lights add theirs.
+    ambient: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -126,6 +131,8 @@ struct GeneratePlan {
     seed: u64,
     min_room: Option<u32>,
     margin: Option<u32>,
+    #[serde(default)]
+    hall: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -210,6 +217,8 @@ struct ScatterPlan {
     count: u32,
     #[serde(default)]
     seed: u64,
+    #[serde(default)]
+    along_walls: bool,
 }
 
 impl Plan {
@@ -229,6 +238,11 @@ impl Plan {
             workspace
                 .set_background(&map, background)
                 .context("[style] background")?;
+        }
+        if let Some(ambient) = &self.style.ambient {
+            workspace
+                .set_ambient_light(&map, ambient)
+                .context("[style] ambient")?;
         }
         self.add_structure(workspace, &map)?;
         self.furnish(workspace, &map)?;
@@ -349,6 +363,7 @@ impl GeneratePlan {
             height: self.height,
             min_room: self.min_room.unwrap_or(DEFAULT_MIN_ROOM),
             margin: self.margin.unwrap_or(DEFAULT_MARGIN),
+            hall: self.hall,
             seed: self.seed,
             floor: styled(None, style.floor.as_ref(), "floor").context("[generate]")?,
             wall: styled(None, style.wall.as_ref(), "wall").context("[generate]")?,
@@ -431,6 +446,7 @@ impl ScatterPlan {
             area: (&self.shape).into(),
             count: self.count,
             seed: self.seed,
+            along_walls: self.along_walls,
         }
     }
 }
@@ -460,6 +476,7 @@ floor = "res://packs/LOREGD01/textures/tilesets/simple/Tileset_RT_Punched_Floor.
 wall = "res://packs/LOREGD01/textures/walls/Wall_Underhive_Industrial.webp"
 door = "res://packs/LOREGD01/textures/portals/Door_Underhive_Industrial.webp"
 background = "res://textures/terrain/terrain_void.png"
+ambient = "404858"
 "#;
 
     fn workspace() -> Workspace {
@@ -564,6 +581,13 @@ assets = ["res://packs/LOREGD01/textures/objects/[LORE] Clutter/Debris_Can_Empty
 shape = { type = "rectangle", x = 0, y = 0, width = 30, height = 14 }
 count = 10
 seed = 4
+
+[[scatter]]
+assets = ["res://packs/LOREGD01/textures/objects/[LORE] Containers/Container_Large_Metal_Crate_Green.webp"]
+shape = { type = "rectangle", x = 0, y = 0, width = 30, height = 14 }
+count = 3
+seed = 2
+along_walls = true
 "#,
         )
         .unwrap();
@@ -572,10 +596,18 @@ seed = 4
             description.contains("Background: terrain_void"),
             "{description}"
         );
+        assert!(
+            description.contains("Ambient light: ff404858"),
+            "{description}"
+        );
         assert!(description.contains("W0:"), "{description}");
         assert!(description.contains("L0:"), "{description}");
         assert!(
             description.contains("P9: Debris_Can_Empty"),
+            "{description}"
+        );
+        assert!(
+            description.contains("P12: Container_Large_Metal_Crate_Green"),
             "{description}"
         );
         assert_eq!(workspace.validate(&map), Ok(vec![]));

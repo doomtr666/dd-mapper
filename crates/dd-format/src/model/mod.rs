@@ -17,7 +17,7 @@ pub use color::Color;
 pub use decoration::{Light, Object, Pattern};
 pub use ground::{Cave, Shapes, Terrain, Tiles};
 pub use header::{Header, PackEntry};
-pub use level::Level;
+pub use level::{Environment, Level};
 pub use map_file::{MapFile, World};
 pub use node_id::{NodeId, decimal as decimal_node_ids};
 pub use wall::{Portal, Wall};

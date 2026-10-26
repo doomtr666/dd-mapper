@@ -150,6 +150,7 @@ async fn lists_the_design_tools() {
             "floor_paint",
             "layout_generate",
             "light_add",
+            "map_ambient",
             "map_background",
             "map_describe",
             "map_new",
@@ -297,6 +298,11 @@ async fn dresses_a_building_with_clutter_and_a_background() {
         ok_text(&call(&client, "floor_paint", floor).await),
         "Painted 56 cells."
     );
+    let ambient = json!({"map_id": "map-1", "color": "404858"});
+    assert_eq!(
+        ok_text(&call(&client, "map_ambient", ambient).await),
+        "map-1 now has an ambient light of ff404858."
+    );
     let scatter = json!({
         "map_id": "map-1",
         "assets": [CAN],
@@ -305,7 +311,22 @@ async fn dresses_a_building_with_clutter_and_a_background() {
         "seed": 3,
     });
     let strewn = ok_text(&call(&client, "prop_scatter", scatter).await);
-    assert_eq!(strewn, "Placed 12 props: P0 to P11.");
+    assert_eq!(
+        strewn,
+        "Placed 12 props: P0 to P11. Debris_Can_Empty is smaller than a third of a cell and will barely show: prefer larger clutter."
+    );
+    let lined = json!({
+        "map_id": "map-1",
+        "assets": [CRATE],
+        "shape": {"type": "rectangle", "x": 0, "y": 0, "width": 30, "height": 14},
+        "count": 4,
+        "seed": 5,
+        "along_walls": true,
+    });
+    assert_eq!(
+        ok_text(&call(&client, "prop_scatter", lined).await),
+        "Placed 4 props: P12 to P15."
+    );
     let removed = json!({"map_id": "map-1", "prop_id": "P3"});
     assert_eq!(
         ok_text(&call(&client, "prop_remove", removed).await),
@@ -324,7 +345,9 @@ async fn dresses_a_building_with_clutter_and_a_background() {
     std::fs::remove_file(&destination).unwrap();
     let level = &saved.world().levels["0"];
     assert_eq!(level.terrain.texture_1, VOID);
-    assert_eq!(level.objects.len(), 11);
+    let environment = level.environment.as_ref().unwrap();
+    assert_eq!(environment.ambient_light.0, 0xff40_4858);
+    assert_eq!(level.objects.len(), 15);
     client.cancel().await.unwrap();
 }
 

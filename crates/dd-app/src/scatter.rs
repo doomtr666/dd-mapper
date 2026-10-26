@@ -1,7 +1,8 @@
-//! Clutter strewn at random over an area: debris, cans, papers, cables...
+//! Clutter strewn at random over an area, or lined along its walls: debris,
+//! cans, papers, cables, crates, lockers...
 
 use dd_catalog::AssetKind;
-use dd_domain::{AssetPath, CellPosition, Footprint, Map, Polygon, Prop, QuarterTurn};
+use dd_domain::{AssetPath, CellPosition, Footprint, Map, Polygon, Prop, QuarterTurn, Segment};
 use dd_gen::Random;
 
 use crate::assets::resolve;
@@ -16,6 +17,10 @@ const ATTEMPTS_PER_PROP: u32 = 60;
 const DOORWAY_CLEARANCE: f64 = 1.0;
 /// Positions are drawn on a grid this fine, per cell.
 const STEPS_PER_CELL: u32 = 100;
+/// Space left between a wall and the props lined along it, in cells.
+const WALL_GAP: f64 = 0.05;
+/// Props whose longest side is shorter than this barely show on a map, in cells.
+const VISIBLE_SIDE: f64 = 0.35;
 
 /// Props picked among `assets` and strewn over `area`, inside rooms, clear of
 /// walls, doorways and other props.
@@ -27,6 +32,9 @@ pub struct ScatterRequest {
     pub count: u32,
     /// The same seed strews the same way.
     pub seed: u64,
+    /// Line the props along the walls, backs to the wall, instead of
+    /// strewing them anywhere.
+    pub along_walls: bool,
 }
 
 /// What a scatter placed.
@@ -35,6 +43,15 @@ pub struct ScatterReport {
     pub props: Vec<String>,
     /// Props asked for that found no free spot.
     pub missing: u32,
+    /// Names of the assets too small to show on a map.
+    pub tiny: Vec<String>,
+}
+
+/// An object to pick, and the space it takes.
+struct Piece {
+    asset: AssetPath,
+    name: String,
+    footprint: Footprint,
 }
 
 impl Workspace {
@@ -49,11 +66,23 @@ impl Workspace {
         let palette = self.palette(&request.assets)?;
         let area = request.area.to_polygon()?;
         let target = self.map_mut(map)?;
+        let walls = if request.along_walls {
+            straight_walls(target)
+        } else {
+            Vec::new()
+        };
         let mut random = Random::new(request.seed);
         let mut props = Vec::new();
         for _ in 0..request.count {
             let spot = (0..ATTEMPTS_PER_PROP)
-                .map(|_| candidate(&palette, &area, &mut random))
+                .filter_map(|_| {
+                    let piece = pick(&palette, &mut random);
+                    if request.along_walls {
+                        against_wall(piece, &walls, &mut random)
+                    } else {
+                        Some(anywhere(piece, &area, &mut random))
+                    }
+                })
                 .find(|prop| fits(target, &area, prop));
             if let Some(prop) = spot {
                 props.push(prop_label(target.add_prop(prop)?));
@@ -63,11 +92,12 @@ impl Workspace {
         Ok(ScatterReport {
             props,
             missing: request.count - placed,
+            tiny: tiny_names(&palette),
         })
     }
 
     /// The objects to pick from, with their footprints.
-    fn palette(&self, assets: &[String]) -> Result<Vec<(AssetPath, Footprint)>, AppError> {
+    fn palette(&self, assets: &[String]) -> Result<Vec<Piece>, AppError> {
         if assets.is_empty() {
             return Err(AppError::NothingToScatter);
         }
@@ -75,27 +105,100 @@ impl Workspace {
             .iter()
             .map(|path| {
                 let asset = resolve(self.catalog(), path, AssetKind::Object)?;
-                Ok((asset.path.clone(), footprint(asset)?))
+                Ok(Piece {
+                    asset: asset.path.clone(),
+                    name: asset.name.clone(),
+                    footprint: footprint(asset)?,
+                })
             })
             .collect()
     }
 }
 
-/// A random prop of the palette, turned at random, centered in the area's bounds.
-fn candidate(palette: &[(AssetPath, Footprint)], area: &Polygon, random: &mut Random) -> Prop {
+fn pick<'p>(palette: &'p [Piece], random: &mut Random) -> &'p Piece {
     let last = u32::try_from(palette.len() - 1).unwrap_or(0);
-    let (asset, footprint) = &palette[random.between(0, last) as usize];
+    &palette[random.between(0, last) as usize]
+}
+
+fn tiny_names(palette: &[Piece]) -> Vec<String> {
+    palette
+        .iter()
+        .filter(|piece| piece.footprint.width().max(piece.footprint.height()) < VISIBLE_SIDE)
+        .map(|piece| piece.name.clone())
+        .collect()
+}
+
+/// The piece turned at random, centered anywhere in the area's bounds.
+fn anywhere(piece: &Piece, area: &Polygon, random: &mut Random) -> Prop {
     let turns = random.between(0, 3).cast_signed();
     let (low, high) = bounds(area);
     Prop {
-        asset: asset.clone(),
+        asset: piece.asset.clone(),
         center: CellPosition::new(
             between(low.x, high.x, random),
             between(low.y, high.y, random),
         ),
         rotation: QuarterTurn::from_degrees(turns * 90).unwrap_or(QuarterTurn::Deg0),
-        footprint: *footprint,
+        footprint: piece.footprint,
     }
+}
+
+/// The piece against a random side of a random wall, facing away from it.
+fn against_wall(piece: &Piece, walls: &[Segment], random: &mut Random) -> Option<Prop> {
+    let last = u32::try_from(walls.len().checked_sub(1)?).ok()?;
+    let wall = walls[random.between(0, last) as usize];
+    let point = wall.point_at(between(0.0, 1.0, random));
+    let (dx, dy) = (
+        (wall.end.x - wall.start.x).signum(),
+        (wall.end.y - wall.start.y).signum(),
+    );
+    let side = if random.coin() { 1 } else { -1 };
+    let (nx, ny) = (-dy * side, dx * side);
+    let rotation = facing(nx, ny);
+    let turned = piece.footprint.turned(rotation);
+    let depth = if nx == 0 {
+        turned.height()
+    } else {
+        turned.width()
+    };
+    let offset = depth / 2.0 + WALL_GAP;
+    Some(Prop {
+        asset: piece.asset.clone(),
+        center: CellPosition::new(
+            point.x + f64::from(nx) * offset,
+            point.y + f64::from(ny) * offset,
+        ),
+        rotation,
+        footprint: piece.footprint,
+    })
+}
+
+/// The turn making a prop face `(nx, ny)`: LORE art faces down at 0 degrees.
+fn facing(nx: i32, ny: i32) -> QuarterTurn {
+    match (nx, ny) {
+        (0, 1) => QuarterTurn::Deg0,
+        (-1, 0) => QuarterTurn::Deg90,
+        (0, -1) => QuarterTurn::Deg180,
+        _ => QuarterTurn::Deg270,
+    }
+}
+
+/// Every horizontal or vertical wall: rooms, pillars and partitions.
+fn straight_walls(map: &Map) -> Vec<Segment> {
+    let mut walls: Vec<Segment> = map
+        .rooms()
+        .flat_map(|(_, room)| {
+            room.wall_loops()
+                .flat_map(|(_, ring)| ring.segments())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    walls.extend(
+        map.partitions()
+            .flat_map(|(_, partition)| partition.segments().collect::<Vec<_>>()),
+    );
+    walls.retain(|wall| wall.start.x == wall.end.x || wall.start.y == wall.end.y);
+    walls
 }
 
 /// Inside the area and a room, crossing no wall, prop or doorway.
@@ -155,6 +258,8 @@ fn distance_to_box(point: CellPosition, low: CellPosition, high: CellPosition) -
 
 #[cfg(test)]
 mod tests {
+    use dd_domain::QuarterTurn;
+
     use super::ScatterRequest;
     use crate::assets::tests::{CAN, CRATE, DOOR, FLOOR, WALL};
     use crate::workspace::tests::workspace;
@@ -203,7 +308,54 @@ mod tests {
             area: rectangle(0, 0, 20, 12),
             count,
             seed,
+            along_walls: false,
         }
+    }
+
+    /// Room walls x = 1, 13 and y = 1, 9; the split x = 7; the pillar's sides.
+    fn gap_to_walls((low, high): ((f64, f64), (f64, f64))) -> f64 {
+        let verticals = [1.0, 3.0, 4.0, 7.0, 13.0];
+        let horizontals = [1.0, 3.0, 4.0, 9.0];
+        let gaps_x = verticals
+            .iter()
+            .flat_map(|x| [(low.0 - x).abs(), (high.0 - x).abs()]);
+        let gaps_y = horizontals
+            .iter()
+            .flat_map(|y| [(low.1 - y).abs(), (high.1 - y).abs()]);
+        gaps_x.chain(gaps_y).fold(f64::INFINITY, f64::min)
+    }
+
+    #[test]
+    fn lines_walls_with_props_facing_the_room() {
+        let (mut workspace, map) = split_room();
+        let along = ScatterRequest {
+            assets: vec![CRATE.to_owned()],
+            along_walls: true,
+            ..strew(12, 8)
+        };
+        let report = workspace.scatter(&map, &along).unwrap();
+        assert!(report.props.len() >= 8, "{report:?}");
+        assert_eq!(workspace.validate(&map), Ok(vec![]));
+        let (_, found) = workspace.map(&map).unwrap();
+        for (_, prop) in found.props() {
+            let (low, high) = prop.bounds();
+            let gap = gap_to_walls(((low.x, low.y), (high.x, high.y)));
+            assert!(gap < 0.2, "{prop:?} stands {gap} from the walls");
+            if (low.y - 1.0).abs() < 0.2 {
+                assert_eq!(
+                    prop.rotation,
+                    QuarterTurn::Deg0,
+                    "{prop:?} under the top wall"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn flags_assets_too_small_to_show() {
+        let (mut workspace, map) = split_room();
+        let report = workspace.scatter(&map, &strew(4, 1)).unwrap();
+        assert_eq!(report.tiny, ["Debris_Can_Empty"]);
     }
 
     #[test]

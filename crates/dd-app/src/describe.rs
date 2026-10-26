@@ -16,6 +16,9 @@ pub fn describe(map_label: &str, map: &Map) -> String {
     if let Some(background) = map.background() {
         text.push_str(&background_line(background));
     }
+    if let Some(argb) = map.ambient_light() {
+        text.push_str(&ambient_line(argb));
+    }
     if map.rooms().next().is_none() {
         text.push_str("No room yet.\n");
     } else {
@@ -55,6 +58,10 @@ pub fn describe(map_label: &str, map: &Map) -> String {
         }
     }
     text
+}
+
+fn ambient_line(argb: u32) -> String {
+    format!("Ambient light: {argb:08x}\n")
 }
 
 fn background_line(background: &AssetPath) -> String {

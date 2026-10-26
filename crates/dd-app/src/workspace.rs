@@ -274,6 +274,17 @@ impl Workspace {
         Ok(())
     }
 
+    /// Sets the light everywhere on the map; dim it so that lights stand out.
+    /// Returns the ARGB color set.
+    ///
+    /// # Errors
+    /// Fails on an unknown map or a malformed color.
+    pub fn set_ambient_light(&mut self, map: &str, color: &str) -> Result<u32, AppError> {
+        let argb = parse_color(color)?;
+        self.map_mut(map)?.set_ambient_light(argb);
+        Ok(argb)
+    }
+
     /// Covers the whole ground, around and under rooms, with a terrain texture.
     ///
     /// # Errors
@@ -752,6 +763,23 @@ pub(crate) mod tests {
             workspace.paint_floor(&map, &wall_as_floor),
             Err(AppError::WrongAssetKind { .. })
         ));
+    }
+
+    #[test]
+    fn the_ambient_light_dims_the_whole_map() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        assert_eq!(workspace.set_ambient_light(&map, "404858"), Ok(0xff40_4858));
+        assert!(
+            workspace
+                .describe(&map)
+                .unwrap()
+                .contains("Ambient light: ff404858")
+        );
+        assert_eq!(
+            workspace.set_ambient_light(&map, "dark"),
+            Err(AppError::InvalidColor("dark".to_owned()))
+        );
     }
 
     #[test]

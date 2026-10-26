@@ -109,6 +109,7 @@ Then restart Claude Desktop.
 | `light_add` | adds a light, with range, intensity and color |
 | `floor_paint` | repaints the floor of an area, such as one room, with another tileset |
 | `pattern_add` | paints a floor pattern: grates, hazard stripes... |
+| `map_ambient` | sets the ambient light; dim it so that lights stand out |
 | `map_background` | covers the whole ground with a terrain texture, such as `terrain_void` for space |
 | `map_describe` | describes the map in text, with the ids shown on previews |
 | `map_preview` | draws a schematic PNG of the map |
@@ -154,6 +155,7 @@ floor = "res://packs/LOREGD01/textures/tilesets/simple/Tileset_RT_Punched_Floor.
 wall = "res://packs/LOREGD01/textures/walls/Wall_Underhive_Industrial.webp"
 door = "res://packs/LOREGD01/textures/portals/Door_Underhive_Industrial.webp"
 background = "res://textures/terrain/terrain_void.png"   # the ground around rooms
+ambient = "404858"           # light everywhere; dim it so that lights stand out
 
 [map]                        # a blank map...
 width = 30
@@ -165,6 +167,7 @@ height = 20
 # height = 14
 # seed = 7                   # the same seed draws the same building
 # margin = 1                 # free cells around the building, such as room for engines
+# hall = false               # bsp: a large hall, half the building, between two wings
 # min_room = 3               # narrowest room, in cells
 
 [[room]]
@@ -214,6 +217,8 @@ every room can be reached:
 
 - `bsp` splits the building at random into rooms at least `min_room` cells wide (a
   manufactorum, a bunker, administratum offices) and adds one entrance on the south side.
+  With `hall`, half the building stays one large hall between two wings of rooms, and the
+  entrance opens into the hall.
 - `hab_block` lines both sides of a two-cell corridor with cells. Each cell opens on the
   corridor, and the corridor has an entrance at each end.
 - `ship_deck` is a hab block ending in a pointed bow, entered from the stern.

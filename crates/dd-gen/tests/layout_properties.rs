@@ -9,15 +9,22 @@ use proptest::prelude::*;
 const ON_LINE: f64 = 1e-9;
 
 fn bsp_params() -> impl Strategy<Value = BspParams> {
-    (8_u32..40, 8_u32..30, 2_u32..5, 1_u32..4, any::<u64>()).prop_map(
-        |(width, height, min_room, margin, seed)| BspParams {
+    (
+        8_u32..40,
+        8_u32..30,
+        2_u32..5,
+        1_u32..4,
+        any::<bool>(),
+        any::<u64>(),
+    )
+        .prop_map(|(width, height, min_room, margin, hall, seed)| BspParams {
             width: width + 2 * (margin - 1),
             height: height + 2 * (margin - 1),
             min_room,
             margin,
+            hall,
             seed,
-        },
-    )
+        })
 }
 
 fn hab_params() -> impl Strategy<Value = HabParams> {
@@ -183,6 +190,20 @@ proptest! {
     fn bsp_doors_stay_clear_of_partition_junctions(params in bsp_params()) {
         let clearance = if params.min_room >= 3 { 1.0 } else { 0.5 };
         assert_clear_of_junctions(&bsp(params), clearance)?;
+    }
+
+    /// A hall takes at least half the building when it is long enough to
+    /// keep a wing of rooms on each side.
+    #[test]
+    fn bsp_halls_dominate_the_building(params in bsp_params()) {
+        let layout = bsp(params);
+        let margins = 2 * params.margin;
+        let (width, height) = (params.width - margins, params.height - margins);
+        let cells = u64::from(width) * u64::from(height);
+        let largest = layout.areas.iter().map(dd_gen::Area::cells).max().unwrap();
+        if params.hall && width.max(height) >= 4 * params.min_room {
+            prop_assert!(largest * 2 >= cells, "{largest} of {cells}: {:?}", layout.areas);
+        }
     }
 
     #[test]

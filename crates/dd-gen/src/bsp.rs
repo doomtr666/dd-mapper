@@ -16,6 +16,8 @@ pub struct BspParams {
     pub min_room: u32,
     /// Cells left free around the building, for engines or a courtyard.
     pub margin: u32,
+    /// Keep a large hall, half the building, between two wings of rooms.
+    pub hall: bool,
     pub seed: u64,
 }
 
@@ -36,8 +38,13 @@ pub fn bsp(params: BspParams) -> Layout {
         partitions: Vec::new(),
         doors: Vec::new(),
         areas: Vec::new(),
+        hall: None,
     };
-    builder.split(building);
+    if params.hall {
+        builder.split_around_hall(building);
+    } else {
+        builder.split(building);
+    }
     let entrance = builder.entrance(building);
     builder.doors.push(entrance);
     Layout {
@@ -46,6 +53,17 @@ pub fn bsp(params: BspParams) -> Layout {
         doors: builder.doors,
         areas: builder.areas,
     }
+}
+
+/// What fills one side of a cut.
+#[derive(Debug, Clone, Copy)]
+enum Fill {
+    /// Rooms split further.
+    Rooms,
+    /// One large room left whole.
+    Hall,
+    /// The hall on the first side of this cut, rooms on the other.
+    HallThenRooms(Cut),
 }
 
 /// A straight cut through an area, `offset` cells from its left or top side.
@@ -104,6 +122,7 @@ struct Builder {
     partitions: Vec<Vec<CellPoint>>,
     doors: Vec<DoorSpot>,
     areas: Vec<Area>,
+    hall: Option<Area>,
 }
 
 impl Builder {
@@ -112,13 +131,54 @@ impl Builder {
             self.areas.push(area);
             return;
         };
+        self.divide(area, cut, [Fill::Rooms, Fill::Rooms]);
+    }
+
+    /// A wing of rooms, the hall, and another wing, across the building's length.
+    /// Buildings too short for wings are split as usual.
+    fn split_around_hall(&mut self, building: Area) {
+        let vertical = building.width >= building.height;
+        let length = if vertical {
+            building.width
+        } else {
+            building.height
+        };
+        if length < 4 * self.min_room {
+            self.split(building);
+            return;
+        }
+        let wing = length / 4;
+        let cut = |offset| {
+            if vertical {
+                Cut::Vertical(offset)
+            } else {
+                Cut::Horizontal(offset)
+            }
+        };
+        let hall = Fill::HallThenRooms(cut(length - 2 * wing));
+        self.divide(building, cut(wing), [Fill::Rooms, hall]);
+    }
+
+    /// Cuts `area` with a partition holding one door, and fills both sides.
+    fn divide(&mut self, area: Area, cut: Cut, [first_fill, second_fill]: [Fill; 2]) {
         let (first, second, line) = cut.apply(area);
         let index = self.partitions.len();
         self.partitions.push(line.to_vec());
-        self.split(first);
-        self.split(second);
+        self.fill(first, first_fill);
+        self.fill(second, second_fill);
         let at = self.door_on(line);
         self.doors.push(DoorSpot::Partition { index, at });
+    }
+
+    fn fill(&mut self, area: Area, fill: Fill) {
+        match fill {
+            Fill::Rooms => self.split(area),
+            Fill::Hall => {
+                self.hall = Some(area);
+                self.areas.push(area);
+            }
+            Fill::HallThenRooms(cut) => self.divide(area, cut, [Fill::Hall, Fill::Rooms]),
+        }
     }
 
     fn choose_cut(&mut self, area: Area) -> Option<Cut> {
@@ -184,9 +244,16 @@ impl Builder {
         clear[pick]
     }
 
-    /// An entrance in the middle of a room along the bottom of the building.
+    /// An entrance in the middle of the hall, or of a room, along the bottom
+    /// of the building.
     fn entrance(&mut self, building: Area) -> DoorSpot {
         let (_, bottom) = building.far_corner();
+        if let Some(hall) = self.hall
+            && hall.far_corner().1 == bottom
+        {
+            let middle = f64::from(hall.x) + f64::from(hall.width) / 2.0;
+            return DoorSpot::Outline(CellPosition::new(middle, f64::from(bottom)));
+        }
         let along_bottom: Vec<Area> = self
             .areas
             .iter()

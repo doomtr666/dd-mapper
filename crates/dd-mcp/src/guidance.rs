@@ -6,7 +6,7 @@ Find assets with catalog_search, create a map with map_new (or open one saved by
 Dungeondraft with map_open, or draw a whole building with layout_generate), then add rooms, \
 partitions (wall_add), doors, props, lights (light_add), floor patterns (pattern_add), \
 clutter (prop_scatter), a floor per room (floor_paint) and a background \
-(map_background). Check your work \
+(map_background), and dim the ambient light (map_ambient). Check your work \
 with map_preview (an image with R/W/D/P/L ids) and map_describe, fix it, run map_validate, and \
 finish with map_save. Read the catalog://summary resource to know which packs \
 are available.";
@@ -31,27 +31,35 @@ which cannot go in walls). Prefer the gothic and industrial LORE packs for the \
 Imperium, and keep one wall style per structure.
 3. Create the map with map_new, a little larger than the plan. For a generic \
 building (hab block, ship deck, bunker), layout_generate draws the walls, \
-partitions and doors at once; try other seeds until the layout fits, then go \
-to step 6.
+partitions and doors at once: hall=true keeps a large hall between two wings \
+(a production floor, a nave, a mess), margin leaves room around it (engines \
+behind a ship). Try other seeds until the layout fits, then go to step 6.
 4. Add rooms with room_add. Overlapping or touching rooms merge into one, like \
 in Dungeondraft: use that to shape a building, its corridors and wings. Use \
 pillars for columns and solid blocks.
 5. Split the building into rooms with wall_add: partitions are open walls \
 that never merge. Then add doors with door_add, on a room's outer walls (R0) \
 or on a partition (W0), at a point on that wall.
-6. Call map_preview and map_describe. Fix what looks wrong before going on.
-7. Furnish with prop_place: consoles, crates, aquilas, cogitators... Search \
-objects with catalog_search; footprints are real sizes in cells, so keep props \
-inside rooms and off doorways. Light the scene with light_add: caged lamps, \
-glowing tanks, window shafts (search kind light); a cold blue or a sickly green \
-sets the underhive mood. Seats and consoles of the LORE packs face down \
-(south) at 0 degrees, west at 90, north at 180 and east at 270; to turn a \
-prop, prop_remove it and place it again. Add floor details with pattern_add: sewer grates, vent fans, hazard markings (search kind pattern). Give rooms their own floor with floor_paint: \
-gratings, plates and worn decking set them apart. Then make it lived in: strew \
-clutter over each room with prop_scatter (debris, cans, papers, cables: small \
-objects only), and give the map a background with map_background (terrain_void \
-for the void of space, rock or ash outdoors). Preview again.
-8. Run map_validate, address the warnings, then map_save to a \
+6. Call map_preview and map_describe. Give every room a purpose before \
+furnishing it: an empty room reads as bare floor.
+7. Floors: give rooms their own tileset with floor_paint, within one family of \
+materials (worn, clean, grated variants of the same style), never a patchwork.
+8. Furnish with prop_place: the piece that tells the room's purpose first \
+(a machine, a cogitator bank, bunks, an altar), then line the walls with \
+prop_scatter along_walls=true (lockers, shelves, barrels, pipes, crates). \
+Footprints are real sizes in cells; keep doorways free. Seats and consoles of \
+the LORE packs face down (south) at 0 degrees, west at 90, north at 180 and \
+east at 270; to turn a prop, prop_remove it and place it again.
+9. Light: dim the ambient light with map_ambient (404858 for an underhive, \
+202838 for a derelict), then put a light in every room with light_add. Prefer \
+plain glows such as res://textures/lights/soft.png: caged and window lights \
+project their pattern on the floor. A cold blue or a sickly green sets the \
+underhive mood; keep intensities around 0.6 to 1.2.
+10. Details: floor patterns with pattern_add (grates, hazard stripes), then \
+clutter with prop_scatter (debris piles, papers, tools, bones of at least half \
+a cell: smaller ones barely show), and a background with map_background \
+(terrain_void for space, rock or ash outdoors). Preview again.
+11. Run map_validate, address the warnings, then map_save to a \
 .dungeondraft_map file and give its path."
     )
 }

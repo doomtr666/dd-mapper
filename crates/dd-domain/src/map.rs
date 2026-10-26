@@ -102,6 +102,8 @@ pub struct Map {
     patterns: Vec<(PatternId, Pattern)>,
     /// Terrain texture covering the whole ground, under rooms.
     background: Option<AssetPath>,
+    /// ARGB light everywhere, before lights add theirs.
+    ambient_light: Option<u32>,
     next_room_id: u32,
     next_door_id: u32,
     next_prop_id: u32,
@@ -123,6 +125,7 @@ impl Map {
             lights: Vec::new(),
             patterns: Vec::new(),
             background: None,
+            ambient_light: None,
             next_room_id: 0,
             next_door_id: 0,
             next_prop_id: 0,
@@ -467,6 +470,15 @@ impl Map {
         self.patterns.iter().map(|(id, pattern)| (*id, pattern))
     }
 
+    pub fn set_ambient_light(&mut self, argb: u32) {
+        self.ambient_light = Some(argb);
+    }
+
+    #[must_use]
+    pub fn ambient_light(&self) -> Option<u32> {
+        self.ambient_light
+    }
+
     pub fn set_background(&mut self, terrain: AssetPath) {
         self.background = Some(terrain);
     }
@@ -776,6 +788,14 @@ mod tests {
                 "wall.webp"
             ]
         );
+    }
+
+    #[test]
+    fn the_ambient_light_is_unset_until_chosen() {
+        let mut map = map();
+        assert_eq!(map.ambient_light(), None);
+        map.set_ambient_light(0xff40_4858);
+        assert_eq!(map.ambient_light(), Some(0xff40_4858));
     }
 
     #[test]

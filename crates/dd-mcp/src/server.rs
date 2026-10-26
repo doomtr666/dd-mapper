@@ -22,9 +22,9 @@ use rmcp::{ErrorData, RoleServer, ServerHandler, tool, tool_handler, tool_router
 use crate::guidance::{DESIGN_PROMPT_DESCRIPTION, DESIGN_PROMPT_NAME, INSTRUCTIONS, design_prompt};
 use crate::params::{
     CatalogSearchParams, DEFAULT_PIXELS_PER_CELL, DoorAddParams, FloorPaintParams,
-    LayoutGenerateParams, LightAddParams, MapBackgroundParams, MapIdParams, MapNewParams,
-    MapOpenParams, MapPreviewParams, MapSaveParams, PatternAddParams, PropPlaceParams,
-    PropRemoveParams, PropScatterParams, RoomAddParams, WallAddParams,
+    LayoutGenerateParams, LightAddParams, MapAmbientParams, MapBackgroundParams, MapIdParams,
+    MapNewParams, MapOpenParams, MapPreviewParams, MapSaveParams, PatternAddParams,
+    PropPlaceParams, PropRemoveParams, PropScatterParams, RoomAddParams, WallAddParams,
 };
 
 const SERVER_NAME: &str = "dd-mapper";
@@ -154,13 +154,25 @@ decking for cabins. Walls stay as they are."
     #[tool(
         description = "Strew small props at random over an area: debris, cans, papers, \
 cables, bones... Each is picked among the given assets and turned at random, inside a room, \
-clear of walls, doorways and other props. Use it for clutter, not for furniture. Returns the \
-prop ids."
+clear of walls, doorways and other props. With along_walls, props line the walls instead, \
+backs to the wall and facing the room: lockers, shelves, barrels, pipes. Pick props of at least \
+half a cell: smaller ones barely show. Returns the prop ids."
     )]
     fn prop_scatter(&self, Parameters(params): Parameters<PropScatterParams>) -> CallToolResult {
         let (map, request) = params.into_request();
         let report = self.with_workspace(|workspace| workspace.scatter(&map, &request));
         reply(report.map(|report| scatter_report(&report)))
+    }
+
+    #[tool(
+        description = "Set the ambient light of a map, the light everywhere before lights \
+add theirs. It is full white by default, which flattens everything: dim it (404858 for an \
+underhive, 202838 for a derelict) and place lights where the scene needs them."
+    )]
+    fn map_ambient(&self, Parameters(params): Parameters<MapAmbientParams>) -> CallToolResult {
+        let set = self
+            .with_workspace(|workspace| workspace.set_ambient_light(&params.map_id, &params.color));
+        reply(set.map(|argb| format!("{} now has an ambient light of {argb:08x}.", params.map_id)))
     }
 
     #[tool(
@@ -379,12 +391,21 @@ fn scatter_report(report: &ScatterReport) -> String {
         [only] => format!("Placed 1 prop: {only}"),
         [first, .., last] => format!("Placed {} props: {first} to {last}", report.props.len()),
     };
-    if report.missing == 0 {
-        return format!("{placed}.");
+    let text = if report.missing == 0 {
+        format!("{placed}.")
+    } else {
+        format!(
+            "{placed}; {} found no free spot, so the area is full: use a larger area or fewer props.",
+            report.missing
+        )
+    };
+    if report.tiny.is_empty() {
+        return text;
     }
+    let verb = if report.tiny.len() == 1 { "is" } else { "are" };
     format!(
-        "{placed}; {} found no free spot, so the area is full: use a larger area or fewer props.",
-        report.missing
+        "{text} {} {verb} smaller than a third of a cell and will barely show: prefer larger clutter.",
+        report.tiny.join(", ")
     )
 }
 

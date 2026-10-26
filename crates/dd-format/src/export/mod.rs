@@ -33,7 +33,7 @@ use self::shapes::build_shapes;
 use self::tiles::build_tiles;
 use self::walls::{build_free_wall, build_wall};
 use crate::Preserved;
-use crate::model::{Level, Light, MapFile, NodeId, Object, Pattern, Wall};
+use crate::model::{Color, Environment, Level, Light, MapFile, NodeId, Object, Pattern, Wall};
 
 const GROUND_LEVEL: &str = "0";
 
@@ -133,6 +133,9 @@ pub fn export_map(
     if let Some(background) = map.background() {
         cover_terrain(level, map.grid(), background);
     }
+    if let Some(argb) = map.ambient_light() {
+        set_ambient_light(level, Color(argb));
+    }
     if let Some(header) = file.header_mut() {
         declare_packs(header, map, settings);
     }
@@ -160,6 +163,18 @@ fn reset_ground(level: &mut Level, grid: GridSize) {
     *level.cave = cave;
     let terrain = blank_terrain(grid, &level.terrain);
     *level.terrain = terrain;
+}
+
+fn set_ambient_light(level: &mut Level, ambient_light: Color) {
+    match &mut level.environment {
+        Some(environment) => environment.ambient_light = ambient_light,
+        None => {
+            level.environment = Some(Preserved::new(Environment {
+                baked_lighting: true,
+                ambient_light,
+            }));
+        }
+    }
 }
 
 /// Paints the whole terrain with `background`.
@@ -263,7 +278,7 @@ mod tests {
     use dd_domain::{AssetPath, CellPoint, GridSize, Map, Polygon, Room};
 
     use super::{ExportError, ExportSettings, PackManifest, export_map};
-    use crate::model::{MapFile, NodeId};
+    use crate::model::{Color, MapFile, NodeId};
 
     fn template() -> MapFile {
         let text = include_str!("../../../../fixtures/test2.dungeondraft_map");
@@ -446,6 +461,28 @@ mod tests {
         let map = Map::new(GridSize::new(48, 27).unwrap());
         let exported = export_map(&map, &template, &ExportSettings::default()).unwrap();
         assert_eq!(exported.world().levels["0"].terrain.splat, painted);
+    }
+
+    #[test]
+    fn the_ambient_light_is_written_when_chosen() {
+        let mut map = Map::new(GridSize::new(10, 8).unwrap());
+        let untouched = export_map(&map, &template(), &ExportSettings::default()).unwrap();
+        let ambient = |file: &MapFile| {
+            file.world().levels["0"]
+                .environment
+                .as_ref()
+                .map(|environment| environment.ambient_light)
+        };
+        assert_eq!(ambient(&untouched), Some(Color::WHITE));
+        map.set_ambient_light(0xff40_4858);
+        let dimmed = export_map(&map, &template(), &ExportSettings::default()).unwrap();
+        assert_eq!(ambient(&dimmed), Some(Color(0xff40_4858)));
+        assert!(
+            dimmed
+                .to_text()
+                .unwrap()
+                .contains("\"baked_lighting\": true,\n\t\t\t\t\t\"ambient_light\": \"ff404858\"")
+        );
     }
 
     #[test]
