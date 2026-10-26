@@ -126,6 +126,7 @@ mod tests {
             center: CellPosition::new(3.0, 3.0),
             rotation: QuarterTurn::Deg0,
             footprint: Footprint::new(1.86, 2.93).unwrap(),
+            tint: None,
         })
         .unwrap();
         let facts = SaveFacts {

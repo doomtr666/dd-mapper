@@ -34,7 +34,10 @@ building (hab block, ship deck, bunker), layout_generate draws the walls, \
 partitions and doors at once: hall=true keeps a large hall between two wings \
 (a production floor, a nave, a mess), margin leaves room around it (engines \
 behind a ship). Try other seeds until the layout fits, then go to step 6.
-4. Add rooms with room_add. Overlapping or touching rooms merge into one, like \
+4. Caves: cave_generate grows a network of caverns over an area, cave_carve \
+digs chambers and tunnels with natural walls (or fills them back), and \
+cave_entrance opens the walls where a path enters. Props on cave floors need no \
+room. Then add rooms with room_add. Overlapping or touching rooms merge into one, like \
 in Dungeondraft: use that to shape a building, its corridors and wings. Use \
 pillars for columns and solid blocks.
 5. Split the building into rooms with wall_add: partitions are open walls \
@@ -55,7 +58,11 @@ east at 270; to turn a prop, prop_remove it and place it again.
 plain glows such as res://textures/lights/soft.png: caged and window lights \
 project their pattern on the floor. A cold blue or a sickly green sets the \
 underhive mood; keep intensities around 0.6 to 1.2.
-10. Details: floor patterns with pattern_add (grates, hazard stripes), then \
+10. Details: conveyor belts, cables and pipes with path_add (search kind \
+path); floor patterns with pattern_add for man-made shapes only (grates, \
+hazard stripes): a pattern keeps the straight edges of its shape, so make spills \
+and puddles with organic props instead: blood_water_stain props given a color \
+(5aff3c for acid, 3a2a1a for oil), or swamp_puddle. Then \
 clutter with prop_scatter (debris piles, papers, tools, bones of at least half \
 a cell: smaller ones barely show), and a background with map_background \
 (terrain_void for space, rock or ash outdoors). Preview again.

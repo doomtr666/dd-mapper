@@ -2,11 +2,12 @@
 
 use dd_domain::{
     AssetPath, Door, DoorId, Light, LightId, Map, Partition, PartitionId, Pattern, PatternId,
-    Polygon, Prop, PropId, Room, RoomId,
+    Polygon, Prop, PropId, Room, RoomId, Track, TrackId,
 };
 
 use crate::ids::{
-    door_label, light_label, partition_label, pattern_label, prop_label, room_label, wall_owner,
+    door_label, light_label, partition_label, pattern_label, prop_label, room_label, track_label,
+    wall_owner,
 };
 
 /// Lists the rooms, doors and props of `map`, named as on the preview.
@@ -18,6 +19,9 @@ pub fn describe(map_label: &str, map: &Map) -> String {
     }
     if let Some(argb) = map.ambient_light() {
         text.push_str(&ambient_line(argb));
+    }
+    if map.cave().floor_samples() > 0 {
+        text.push_str(&cave_line(map));
     }
     if map.rooms().next().is_none() {
         text.push_str("No room yet.\n");
@@ -45,6 +49,12 @@ pub fn describe(map_label: &str, map: &Map) -> String {
             text.push_str(&pattern_line(id, pattern));
         }
     }
+    if map.tracks().next().is_some() {
+        text.push_str("Paths:\n");
+        for (id, track) in map.tracks() {
+            text.push_str(&track_line(id, track));
+        }
+    }
     if map.lights().next().is_some() {
         text.push_str("Lights:\n");
         for (id, light) in map.lights() {
@@ -58,6 +68,20 @@ pub fn describe(map_label: &str, map: &Map) -> String {
         }
     }
     text
+}
+
+/// Sixteen quarter-cell samples make a cell.
+const SAMPLES_PER_CELL_AREA: f64 = 16.0;
+
+fn cave_line(map: &Map) -> String {
+    let samples = u32::try_from(map.cave().floor_samples()).unwrap_or(u32::MAX);
+    let cells = (f64::from(samples) / SAMPLES_PER_CELL_AREA).round();
+    let entrances = if map.cave().has_entrance() {
+        ", with entrances"
+    } else {
+        ""
+    };
+    format!("Cave: about {cells} cells of floor{entrances}\n")
 }
 
 fn ambient_line(argb: u32) -> String {
@@ -159,6 +183,22 @@ fn pattern_line(id: PatternId, pattern: &Pattern) -> String {
     )
 }
 
+fn track_line(id: TrackId, track: &Track) -> String {
+    let points: Vec<String> = track
+        .points()
+        .iter()
+        .map(|point| format!("({}, {})", hundredths(point.x), hundredths(point.y)))
+        .collect();
+    let closed = if track.closed() { ", closed" } else { "" };
+    format!(
+        "- {}: {} through {}, {} cells wide{closed}\n",
+        track_label(id),
+        asset_name(track.asset()),
+        points.join(" - "),
+        hundredths(track.width()),
+    )
+}
+
 fn light_line(id: LightId, light: &Light) -> String {
     format!(
         "- {}: {} at ({}, {}), range {} cells, intensity {}, color {:08x}\n",
@@ -173,8 +213,11 @@ fn light_line(id: LightId, light: &Light) -> String {
 }
 
 fn prop_line(id: PropId, prop: &Prop) -> String {
+    let tint = prop
+        .tint
+        .map_or_else(String::new, |argb| format!(", tint {argb:08x}"));
     format!(
-        "- {}: {} at ({}, {}), {} degrees, {} x {} cells\n",
+        "- {}: {} at ({}, {}), {} degrees, {} x {} cells{tint}\n",
         prop_label(id),
         asset_name(&prop.asset),
         prop.center.x,
@@ -243,6 +286,7 @@ mod tests {
             center: CellPosition::new(12.5, 3.5),
             rotation: QuarterTurn::Deg90,
             footprint: Footprint::new(2.0, 1.5).unwrap(),
+            tint: None,
         })
         .unwrap();
 
@@ -266,6 +310,7 @@ mod tests {
             center: CellPosition::new(8.0, 3.5),
             rotation: QuarterTurn::Deg0,
             footprint: Footprint::new(0.656_25, 0.8125).unwrap(),
+            tint: None,
         })
         .unwrap();
         assert!(

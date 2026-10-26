@@ -14,6 +14,9 @@ pub struct Object {
     pub layer: i32,
     pub shadow: bool,
     pub block_light: bool,
+    /// Only written for colored objects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_color: Option<Color>,
     pub node_id: NodeId,
 }
 
@@ -42,5 +45,32 @@ pub struct Pattern {
     pub outline: bool,
     pub texture: String,
     pub rotation: f64,
+    pub node_id: NodeId,
+}
+
+/// A texture drawn along a line, such as a conveyor belt or a cable. Points
+/// are relative to `position`, and Dungeondraft repeats the last one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the path record Dungeondraft writes, flag for flag"
+)]
+pub struct Path {
+    pub position: Vector2,
+    pub rotation: f64,
+    pub scale: Vector2,
+    pub edit_points: PoolVector2Array,
+    pub smoothness: f64,
+    pub texture: String,
+    /// In pixels.
+    pub width: f64,
+    pub layer: i32,
+    pub fade_in: bool,
+    pub fade_out: bool,
+    pub grow: bool,
+    pub shrink: bool,
+    pub block_light: bool,
+    #[serde(rename = "loop")]
+    pub closed_loop: bool,
     pub node_id: NodeId,
 }

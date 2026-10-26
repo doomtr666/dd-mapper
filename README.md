@@ -100,6 +100,9 @@ Then restart Claude Desktop.
 | `map_new` | creates an empty map |
 | `map_open` | opens a map saved by Dungeondraft; saving keeps what the server does not model |
 | `layout_generate` | draws a whole building on a new map: `bsp`, `hab_block` or `ship_deck` |
+| `cave_generate` | grows a network of caverns over an area; every part can be reached |
+| `cave_carve` | digs (or fills) a chamber, a tunnel or an exact area, with natural walls |
+| `cave_entrance` | leaves the cave walls open where a path enters |
 | `room_add` | adds a walled room (rectangle or polygon, with pillars); rooms merge like in Dungeondraft |
 | `wall_add` | adds a free-standing wall, such as a partition |
 | `door_add` | puts a door on a room (`R0`) or a wall (`W0`), at the wall point nearest to a position |
@@ -108,6 +111,7 @@ Then restart Claude Desktop.
 | `prop_scatter` | strews small props at random over an area, inside rooms, clear of walls, doorways and other props |
 | `light_add` | adds a light, with range, intensity and color |
 | `floor_paint` | repaints the floor of an area, such as one room, with another tileset |
+| `path_add` | draws a path along points: conveyor belts, cables, pipes, trails |
 | `pattern_add` | paints a floor pattern: grates, hazard stripes... |
 | `map_ambient` | sets the ambient light; dim it so that lights stand out |
 | `map_background` | covers the whole ground with a terrain texture, such as `terrain_void` for space |
@@ -143,7 +147,7 @@ dd-mapper generate crates/dd-cli/tests/data/hab_block.toml --out hab.dungeondraf
 ### Plans
 
 A plan is a TOML file. It starts from either a blank `[map]` or a `[generate]`d building,
-then adds elements in this order: rooms, walls, doors, repainted floors, patterns, props, scattered clutter
+then adds elements in this order: caves (networks, shapes, entrances), rooms, walls, doors, repainted floors, patterns, paths, props, scattered clutter
 and lights. Ids
 follow that order (`R0`, `W0`, `D0`...). A generated building already holds `R0` and
 walls `W0`, `W1`... An element that cannot be added stops the build with its table name
@@ -170,6 +174,23 @@ height = 20
 # hall = false               # bsp: a large hall, half the building, between two wings
 # min_room = 3               # narrowest room, in cells
 
+[[cave_network]]             # caverns grown over a rectangle of cells
+x = 1
+y = 1
+width = 20
+height = 18
+density = 0.47               # share of starting rock: lower is more open
+seed = 3
+
+[[cave]]                     # dig (or fill = true) a chamber, tunnel, rectangle or polygon
+shape = { type = "chamber", x = 24, y = 10, radius = 3 }
+# shape = { type = "tunnel", points = [[17, 10], [24, 10]], width = 2 }
+roughness = 0.4              # 0 smooth to 1 jagged walls
+seed = 1
+
+[[cave_entrance]]            # walls left open where a path comes in
+shape = { type = "chamber", x = 27, y = 10, radius = 1 }
+
 [[room]]
 shape = { type = "rectangle", x = 1, y = 1, width = 12, height = 8 }
 pillars = [{ type = "rectangle", x = 6, y = 4, width = 1, height = 1 }]
@@ -195,6 +216,12 @@ shape = { type = "polygon", points = [[8, 2], [10, 2], [10, 4]] }
 asset = "res://packs/LOREGD01/textures/objects/[LORE] Containers/Container_Large_Metal_Crate_Green.webp"
 at = [3, 3]                  # center, in cells
 rotation = 90                # 0, 90, 180 or 270
+
+[[path]]                     # conveyor belts, cables, pipes, trails
+asset = "res://packs/LOREGD01/textures/paths/Artificial/Path_Conveyor_Belt_Large.webp"
+points = [[2.5, 7], [12, 7], [12, 3.5]]   # cells, anywhere, even off the map's edges
+width = 1.5                  # cells, 1 by default
+closed = false
 
 [[scatter]]                  # clutter strewn at random inside rooms
 assets = ["res://packs/LOREAP01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp"]

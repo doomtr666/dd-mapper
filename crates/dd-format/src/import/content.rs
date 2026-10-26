@@ -1,12 +1,19 @@
-//! Floor tiles, props, lights and patterns.
+//! Floor tiles, props, lights, patterns, paths and caves.
 
 use std::collections::BTreeSet;
 
-use dd_domain::{AssetPath, Cell, Footprint, Glow, Light, Pattern, Polygon, Prop, QuarterTurn};
+use dd_domain::{
+    AssetPath, Cell, CellPosition, Footprint, Glow, Light, Pattern, Polygon, Prop, QuarterTurn,
+    Track,
+};
 
 use super::cells::{grid_points, position};
 use super::{FootprintOf, Importer};
-use crate::model::{Level, Light as LightRecord, Object, Pattern as PatternRecord};
+use crate::export::{CELL_SIZE_PX, unpack_cave};
+use crate::godot::Vector2;
+use crate::model::{
+    Level, Light as LightRecord, Object, Path as PathRecord, Pattern as PatternRecord,
+};
 
 /// Rotations further than this from a quarter turn are reported, in degrees.
 const QUARTER_TURN_TOLERANCE: f64 = 0.5;
@@ -69,6 +76,7 @@ fn import_prop(
         center: position(object.position),
         rotation,
         footprint,
+        tint: object.custom_color.map(|color| color.0),
     };
     importer
         .map
@@ -149,4 +157,59 @@ fn import_pattern(importer: &mut Importer, pattern: &PatternRecord) -> Result<()
         })
         .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+pub fn import_tracks(importer: &mut Importer, level: &Level) {
+    for path in &level.paths {
+        if let Err(error) = import_track(importer, path) {
+            importer.warn(format!("path {} is skipped: {error}", path.node_id.0));
+        }
+    }
+}
+
+fn import_track(importer: &mut Importer, path: &PathRecord) -> Result<(), String> {
+    let transformed = path.rotation != 0.0 || path.scale != Vector2::new(1.0, 1.0);
+    if transformed {
+        importer.warn(format!(
+            "path {} is turned or scaled; its points are kept as drawn",
+            path.node_id.0
+        ));
+    }
+    let mut points: Vec<CellPosition> = path
+        .edit_points
+        .0
+        .iter()
+        .map(|point| {
+            CellPosition::new(
+                (path.position.x + point.x) / CELL_SIZE_PX,
+                (path.position.y + point.y) / CELL_SIZE_PX,
+            )
+        })
+        .collect();
+    points.dedup();
+    let asset = AssetPath::new(path.texture.clone()).map_err(|error| error.to_string())?;
+    let track = Track::new(asset, points, path.width / CELL_SIZE_PX, path.closed_loop)
+        .map_err(|error| error.to_string())?;
+    importer
+        .map
+        .add_track(track)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+pub fn import_cave(importer: &mut Importer, level: &Level) {
+    let grid = importer.map.cave().clone();
+    let (Some(floor), Some(entrance)) = (
+        unpack_cave(&level.cave.bitmap, &grid),
+        unpack_cave(&level.cave.entrance_bitmap, &grid),
+    ) else {
+        importer.warn("the cave does not fit the map size and is skipped".to_owned());
+        return;
+    };
+    let columns = grid.columns();
+    let cave = importer.map.cave_mut();
+    for (index, (floor, entrance)) in floor.into_iter().zip(entrance).enumerate() {
+        let index = u32::try_from(index).unwrap_or(u32::MAX);
+        cave.set(index % columns, index / columns, floor, entrance);
+    }
 }

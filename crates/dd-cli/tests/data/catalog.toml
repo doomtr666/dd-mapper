@@ -24,5 +24,8 @@ path = "res://packs/LOREGD01/textures/patterns/normal/Artifcial/Tileset_AncientG
 path = "res://textures/terrain/terrain_void.png"
 
 [[asset]]
+path = "res://packs/LOREGD01/textures/paths/Artificial/Path_Conveyor_Belt_Large.webp"
+
+[[asset]]
 path = "res://packs/LOREGD01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp"
 size = [0.2, 0.3]

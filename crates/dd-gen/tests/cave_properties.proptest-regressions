@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c314d79dcc3fa9b7fada488eb1747bb1d10324fd878e49f90f8c1a3f26a338cc # shrinks to params = CaveParams { width: 12, height: 10, density: 0.4, seed: 0 }
+cc 53261e82704e0bf01960aba9295ec51dd38da8a218ac5dec4cd6179a29bf7f26 # shrinks to params = CaveParams { width: 12, height: 10, density: 0.4, seed: 0 }
+cc 7bf337bd2ee0d5f0f2ed94862625dfb4056081d6231afa6d7dde3571c3dabf00 # shrinks to params = CaveParams { width: 12, height: 10, density: 0.4, seed: 0 }
+cc 8407a523f2c69abd9035e54f8f154b5b2dcc79f0f6a8b205a3b21fe02fd7493a # shrinks to params = CaveParams { width: 12, height: 10, density: 0.4, seed: 0 }

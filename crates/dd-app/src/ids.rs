@@ -1,6 +1,6 @@
 //! The ids shown to users: `map-1`, `R0`, `D0`, `P0`, as on the preview labels.
 
-use dd_domain::{DoorId, LightId, PartitionId, PatternId, PropId, RoomId, WallRef};
+use dd_domain::{DoorId, LightId, PartitionId, PatternId, PropId, RoomId, TrackId, WallRef};
 
 use crate::AppError;
 
@@ -22,6 +22,10 @@ pub fn light_label(id: LightId) -> String {
 
 pub fn pattern_label(id: PatternId) -> String {
     format!("S{}", id.0)
+}
+
+pub fn track_label(id: TrackId) -> String {
+    format!("T{}", id.0)
 }
 
 pub fn partition_label(id: PartitionId) -> String {

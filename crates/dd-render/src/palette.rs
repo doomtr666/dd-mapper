@@ -7,6 +7,8 @@ pub type Rgb = [u8; 3];
 pub const VOID: Rgb = [30, 30, 34];
 pub const WALL: Rgb = [12, 12, 12];
 pub const PILLAR: Rgb = [70, 64, 58];
+/// Cave floor: pale rock.
+pub const CAVE: Rgb = [118, 116, 100];
 pub const DOOR: Rgb = [235, 140, 30];
 pub const LIGHT: Rgb = [255, 214, 90];
 /// Light ranges tint what they cross.

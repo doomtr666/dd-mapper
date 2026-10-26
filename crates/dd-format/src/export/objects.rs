@@ -4,7 +4,7 @@ use dd_domain::{Prop, QuarterTurn};
 
 use super::pixels::CELL_SIZE_PX;
 use crate::godot::Vector2;
-use crate::model::{NodeId, Object};
+use crate::model::{Color, NodeId, Object};
 
 /// Layer Dungeondraft puts new objects on ("User Layer 1").
 const DEFAULT_OBJECT_LAYER: i32 = 100;
@@ -20,6 +20,7 @@ pub fn build_object(prop: &Prop, node_id: NodeId) -> Object {
         layer: DEFAULT_OBJECT_LAYER,
         shadow: true,
         block_light: false,
+        custom_color: prop.tint.map(Color),
         node_id,
     }
 }
@@ -50,6 +51,7 @@ mod tests {
             center,
             rotation,
             footprint: Footprint::new(1.0, 1.0).unwrap(),
+            tint: None,
         }
     }
 
@@ -71,6 +73,28 @@ mod tests {
             &prop(CellPosition::new(37.5, 23.5), QuarterTurn::Deg90),
             NodeId(0x3d),
         );
+        assert_eq!(as_written(&object), as_written(&expected));
+    }
+
+    #[test]
+    fn rebuilds_a_tinted_stain_of_the_cave_sample() {
+        let fixture = MapFile::parse(include_str!(
+            "../../../../fixtures/cave_and_paths.dungeondraft_map"
+        ))
+        .unwrap();
+        let expected = fixture.world().levels["0"]
+            .objects
+            .iter()
+            .find(|object| object.node_id == NodeId(0x124))
+            .map(|object| (**object).clone())
+            .unwrap();
+        let stain = Prop {
+            asset: AssetPath::new("res://textures/objects/military/blood/blood_water_stain_02.png")
+                .unwrap(),
+            tint: Some(0xfff3_a768),
+            ..prop(CellPosition::new(32.0, 22.5), QuarterTurn::Deg0)
+        };
+        let object = build_object(&stain, NodeId(0x124));
         assert_eq!(as_written(&object), as_written(&expected));
     }
 

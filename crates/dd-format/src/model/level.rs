@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Cave, Color, Light, Object, Pattern, Shapes, Terrain, Tiles, Wall};
+use super::{Cave, Color, Light, Object, Path, Pattern, Shapes, Terrain, Tiles, Wall};
 use crate::Preserved;
 
 /// One floor of the map. Sections not modelled here are preserved as is.
@@ -14,6 +14,8 @@ pub struct Level {
     pub walls: Vec<Preserved<Wall>>,
     pub cave: Preserved<Cave>,
     pub terrain: Preserved<Terrain>,
+    #[serde(default)]
+    pub paths: Vec<Preserved<Path>>,
     pub objects: Vec<Preserved<Object>>,
     pub lights: Vec<Preserved<Light>>,
 }

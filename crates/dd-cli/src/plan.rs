@@ -21,6 +21,23 @@
 //! # margin = 1                 # free cells around the building
 //! # hall = false               # bsp: a large hall between two wings of rooms
 //!
+//! [[cave_network]]             # caverns grown over a rectangle of cells
+//! x = 1
+//! y = 1
+//! width = 20
+//! height = 18
+//! density = 0.47               # share of starting rock: lower is more open
+//! seed = 3
+//!
+//! [[cave]]                     # dig (or fill = true) a chamber, tunnel, rectangle or polygon
+//! shape = { type = "chamber", x = 24, y = 10, radius = 3 }
+//! # shape = { type = "tunnel", points = [[17, 10], [24, 10]], width = 2 }
+//! roughness = 0.4              # 0 smooth to 1 jagged walls
+//! seed = 1
+//!
+//! [[cave_entrance]]            # walls left open where a path comes in
+//! shape = { type = "chamber", x = 27, y = 10, radius = 1 }
+//!
 //! [[room]]                     # R0, R1... in order
 //! shape = { type = "rectangle", x = 1, y = 1, width = 12, height = 8 }
 //! pillars = [{ type = "rectangle", x = 6, y = 4, width = 1, height = 1 }]
@@ -36,6 +53,7 @@
 //! asset = "res://packs/.../Container_Large_Metal_Crate_Green.webp"
 //! at = [3, 3]
 //! rotation = 90
+//! # color = "5aff3c"          # custom color, for assets Dungeondraft lets color
 //!
 //! [[light]]
 //! asset = "res://packs/.../Effect_Caged_Light_Cast.webp"
@@ -46,6 +64,12 @@
 //! [[floor]]                    # another floor for part of the map
 //! shape = { type = "rectangle", x = 7, y = 1, width = 6, height = 8 }
 //! tileset = "res://packs/.../Floor_SpaceShip_Grate_Worn.webp"
+//!
+//! [[path]]                     # conveyor belts, cables, pipes, trails
+//! asset = "res://packs/.../Path_Conveyor_Belt_Large.webp"
+//! points = [[2.5, 7], [12, 7], [12, 3.5]]   # cells, anywhere, even off the map
+//! width = 1.5                  # cells, 1 by default
+//! closed = false
 //!
 //! [[scatter]]                  # clutter strewn at random inside rooms
 //! assets = ["res://packs/.../Debris_Can_Empty.webp"]
@@ -61,9 +85,9 @@
 
 use anyhow::Context as _;
 use dd_app::{
-    DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest, FloorRequest, Generator, LayoutRequest,
-    LightRequest, PatternRequest, PropRequest, RoomRequest, ScatterRequest, Shape, WallRequest,
-    Workspace,
+    CaveNetwork, CaveRequest, CaveShape, DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest,
+    FloorRequest, Generator, LayoutRequest, LightRequest, PathRequest, PatternRequest, PropRequest,
+    RoomRequest, ScatterRequest, Shape, WallRequest, Workspace,
 };
 use serde::Deserialize;
 
@@ -91,6 +115,69 @@ pub struct Plan {
     scatter: Vec<ScatterPlan>,
     #[serde(default)]
     floor: Vec<FloorPlan>,
+    #[serde(default)]
+    path: Vec<PathPlan>,
+    #[serde(default)]
+    cave_network: Vec<CaveNetworkPlan>,
+    #[serde(default)]
+    cave: Vec<CavePlan>,
+    #[serde(default)]
+    cave_entrance: Vec<CaveEntrancePlan>,
+}
+
+/// Roughness of dug walls when none is given.
+const DEFAULT_ROUGHNESS: f64 = 0.4;
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+enum CaveShapePlan {
+    Chamber {
+        x: f64,
+        y: f64,
+        radius: f64,
+    },
+    Tunnel {
+        points: Vec<[f64; 2]>,
+        width: f64,
+    },
+    Rectangle {
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    },
+    Polygon {
+        points: Vec<[i32; 2]>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CaveNetworkPlan {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    density: Option<f64>,
+    #[serde(default)]
+    seed: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CavePlan {
+    shape: CaveShapePlan,
+    #[serde(default)]
+    fill: bool,
+    roughness: Option<f64>,
+    #[serde(default)]
+    seed: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CaveEntrancePlan {
+    shape: CaveShapePlan,
 }
 
 /// Assets used where an element names none.
@@ -182,6 +269,7 @@ struct PropPlan {
     /// Degrees: 0, 90, 180 or 270.
     #[serde(default)]
     rotation: i32,
+    color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -202,6 +290,16 @@ struct PatternPlan {
     color: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PathPlan {
+    asset: String,
+    points: Vec<[f64; 2]>,
+    width: Option<f64>,
+    #[serde(default)]
+    closed: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FloorPlan {
@@ -219,6 +317,7 @@ struct ScatterPlan {
     seed: u64,
     #[serde(default)]
     along_walls: bool,
+    color: Option<String>,
 }
 
 impl Plan {
@@ -234,6 +333,7 @@ impl Plan {
     /// Fails on the first element that cannot be added, naming it.
     pub fn build(&self, workspace: &mut Workspace) -> anyhow::Result<String> {
         let map = self.create_map(workspace)?;
+        self.dig_caves(workspace, &map)?;
         if let Some(background) = &self.style.background {
             workspace
                 .set_background(&map, background)
@@ -247,6 +347,22 @@ impl Plan {
         self.add_structure(workspace, &map)?;
         self.furnish(workspace, &map)?;
         Ok(map)
+    }
+
+    /// Cave networks, then dug or filled shapes, then entrances.
+    fn dig_caves(&self, workspace: &mut Workspace, map: &str) -> anyhow::Result<()> {
+        each(&self.cave_network, "cave_network", |network| {
+            workspace.grow_caves(map, &network.network())?;
+            Ok(())
+        })?;
+        each(&self.cave, "cave", |cave| {
+            workspace.carve_cave(map, &cave.request())?;
+            Ok(())
+        })?;
+        each(&self.cave_entrance, "cave_entrance", |entrance| {
+            workspace.open_cave_entrance(map, &(&entrance.shape).into())?;
+            Ok(())
+        })
     }
 
     /// Rooms, walls, doors and repainted floors.
@@ -270,10 +386,14 @@ impl Plan {
         })
     }
 
-    /// Floor patterns, props, clutter and lights.
+    /// Floor patterns, paths, props, clutter and lights.
     fn furnish(&self, workspace: &mut Workspace, map: &str) -> anyhow::Result<()> {
         each(&self.pattern, "pattern", |pattern| {
             workspace.add_pattern(map, &pattern.request())?;
+            Ok(())
+        })?;
+        each(&self.path, "path", |path| {
+            workspace.add_path(map, &path.request())?;
             Ok(())
         })?;
         each(&self.prop, "prop", |prop| {
@@ -412,6 +532,7 @@ impl PropPlan {
             x,
             y,
             rotation_degrees: self.rotation,
+            color: self.color.clone(),
         }
     }
 }
@@ -426,6 +547,67 @@ impl LightPlan {
             range: self.range,
             intensity: self.intensity,
             color: self.color.clone(),
+        }
+    }
+}
+
+impl From<&CaveShapePlan> for CaveShape {
+    fn from(shape: &CaveShapePlan) -> Self {
+        match shape {
+            &CaveShapePlan::Chamber { x, y, radius } => Self::Chamber { x, y, radius },
+            CaveShapePlan::Tunnel { points, width } => Self::Tunnel {
+                points: points.iter().map(|&[x, y]| (x, y)).collect(),
+                width: *width,
+            },
+            &CaveShapePlan::Rectangle {
+                x,
+                y,
+                width,
+                height,
+            } => Self::Area(Shape::Rectangle {
+                x,
+                y,
+                width,
+                height,
+            }),
+            CaveShapePlan::Polygon { points: corners } => {
+                Self::Area(Shape::Polygon(points(corners)))
+            }
+        }
+    }
+}
+
+impl CaveNetworkPlan {
+    fn network(&self) -> CaveNetwork {
+        CaveNetwork {
+            x: self.x,
+            y: self.y,
+            width: self.width,
+            height: self.height,
+            density: self.density,
+            seed: self.seed,
+        }
+    }
+}
+
+impl CavePlan {
+    fn request(&self) -> CaveRequest {
+        CaveRequest {
+            shape: (&self.shape).into(),
+            fill: self.fill,
+            roughness: self.roughness.unwrap_or(DEFAULT_ROUGHNESS),
+            seed: self.seed,
+        }
+    }
+}
+
+impl PathPlan {
+    fn request(&self) -> PathRequest {
+        PathRequest {
+            asset: self.asset.clone(),
+            points: self.points.iter().map(|&[x, y]| (x, y)).collect(),
+            width: self.width,
+            closed: self.closed,
         }
     }
 }
@@ -447,6 +629,7 @@ impl ScatterPlan {
             count: self.count,
             seed: self.seed,
             along_walls: self.along_walls,
+            color: self.color.clone(),
         }
     }
 }
@@ -582,6 +765,11 @@ shape = { type = "rectangle", x = 0, y = 0, width = 30, height = 14 }
 count = 10
 seed = 4
 
+[[path]]
+asset = "res://packs/LOREGD01/textures/paths/Artificial/Path_Conveyor_Belt_Large.webp"
+points = [[2.5, 7], [12, 7], [12, 3.5]]
+width = 1.5
+
 [[scatter]]
 assets = ["res://packs/LOREGD01/textures/objects/[LORE] Containers/Container_Large_Metal_Crate_Green.webp"]
 shape = { type = "rectangle", x = 0, y = 0, width = 30, height = 14 }
@@ -610,7 +798,44 @@ along_walls = true
             description.contains("P12: Container_Large_Metal_Crate_Green"),
             "{description}"
         );
+        assert!(
+            description.contains("T0: Path_Conveyor_Belt_Large through (2.5, 7) - (12, 7)"),
+            "{description}"
+        );
         assert_eq!(workspace.validate(&map), Ok(vec![]));
+    }
+
+    #[test]
+    fn digs_caves() {
+        let (workspace, map) = build(
+            r#"
+[map]
+width = 30
+height = 20
+
+[[cave_network]]
+x = 1
+y = 1
+width = 18
+height = 18
+seed = 3
+
+[[cave]]
+shape = { type = "chamber", x = 24, y = 10, radius = 3 }
+roughness = 0.4
+seed = 1
+
+[[cave]]
+shape = { type = "tunnel", points = [[17, 10], [24, 10]], width = 2 }
+
+[[cave_entrance]]
+shape = { type = "chamber", x = 27, y = 10, radius = 1 }
+"#,
+        )
+        .unwrap();
+        let description = workspace.describe(&map).unwrap();
+        assert!(description.contains("Cave: about"), "{description}");
+        assert!(description.contains("with entrances"), "{description}");
     }
 
     #[test]

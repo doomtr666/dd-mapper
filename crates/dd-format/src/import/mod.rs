@@ -50,6 +50,8 @@ pub fn import_map(file: &MapFile, footprint_of: FootprintOf) -> Result<ImportedM
     content::import_props(&mut importer, level, footprint_of);
     content::import_lights(&mut importer, level);
     content::import_patterns(&mut importer, level);
+    content::import_tracks(&mut importer, level);
+    content::import_cave(&mut importer, level);
     Ok(ImportedMap {
         map: importer.map,
         warnings: importer.warnings,

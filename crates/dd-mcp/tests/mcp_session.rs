@@ -18,6 +18,7 @@ const DOOR: &str = "res://packs/LOREGD01/textures/portals/Door_Underhive_Industr
 const LIGHT: &str = "res://packs/LOREGD01/textures/lights/Effect_Caged_Light_Cast.webp";
 const GRATE: &str = "res://packs/LOREGD01/textures/patterns/normal/Artifcial/Tileset_AncientGothic_Quarters_Sewer_Open.webp";
 const VOID: &str = "res://textures/terrain/terrain_void.png";
+const BELT: &str = "res://packs/LOREGD01/textures/paths/Artificial/Path_Conveyor_Belt_Large.webp";
 const CAN: &str = "res://packs/LOREGD01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp";
 const CRATE: &str = "res://packs/LOREGD01/textures/objects/[LORE] Containers/Container_Large_Metal_Crate_Green.webp";
 
@@ -40,6 +41,7 @@ fn catalog() -> Catalog {
         (LIGHT, AssetMetrics::default()),
         (GRATE, AssetMetrics::default()),
         (VOID, AssetMetrics::default()),
+        (BELT, AssetMetrics::default()),
         (
             CAN,
             AssetMetrics {
@@ -146,6 +148,9 @@ async fn lists_the_design_tools() {
         names,
         [
             "catalog_search",
+            "cave_carve",
+            "cave_entrance",
+            "cave_generate",
             "door_add",
             "floor_paint",
             "layout_generate",
@@ -158,6 +163,7 @@ async fn lists_the_design_tools() {
             "map_preview",
             "map_save",
             "map_validate",
+            "path_add",
             "pattern_add",
             "prop_place",
             "prop_remove",
@@ -327,6 +333,13 @@ async fn dresses_a_building_with_clutter_and_a_background() {
         ok_text(&call(&client, "prop_scatter", lined).await),
         "Placed 4 props: P12 to P15."
     );
+    let belt = json!({
+        "map_id": "map-1",
+        "asset": BELT,
+        "points": [[2.5, 7], [27.5, 7]],
+        "width": 1.5,
+    });
+    assert_eq!(ok_text(&call(&client, "path_add", belt).await), "T0");
     let removed = json!({"map_id": "map-1", "prop_id": "P3"});
     assert_eq!(
         ok_text(&call(&client, "prop_remove", removed).await),
@@ -348,6 +361,50 @@ async fn dresses_a_building_with_clutter_and_a_background() {
     let environment = level.environment.as_ref().unwrap();
     assert_eq!(environment.ambient_light.0, 0xff40_4858);
     assert_eq!(level.objects.len(), 15);
+    assert_eq!(level.paths.len(), 1);
+    assert!((level.paths[0].width - 384.0).abs() < f64::EPSILON);
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn digs_caves_and_saves_them() {
+    let client = connect().await;
+    ok_text(&call(&client, "map_new", json!({"width": 30, "height": 20})).await);
+    let grown = json!({"map_id": "map-1", "x": 1, "y": 1, "width": 20, "height": 18, "seed": 5});
+    assert!(ok_text(&call(&client, "cave_generate", grown).await).starts_with("Dug about "));
+    let chamber = json!({
+        "map_id": "map-1",
+        "shape": {"type": "chamber", "x": 25, "y": 10, "radius": 3},
+        "roughness": 0.5,
+        "seed": 2,
+    });
+    ok_text(&call(&client, "cave_carve", chamber).await);
+    let tunnel = json!({
+        "map_id": "map-1",
+        "shape": {"type": "tunnel", "points": [[18, 10], [25, 10]], "width": 2},
+    });
+    ok_text(&call(&client, "cave_carve", tunnel).await);
+    let opening = json!({
+        "map_id": "map-1",
+        "shape": {"type": "chamber", "x": 28, "y": 10, "radius": 1},
+    });
+    ok_text(&call(&client, "cave_entrance", opening).await);
+    let description = ok_text(&call(&client, "map_describe", json!({"map_id": "map-1"})).await);
+    assert!(description.contains("with entrances"), "{description}");
+    let warnings = ok_text(&call(&client, "map_validate", json!({"map_id": "map-1"})).await);
+    assert_eq!(warnings, "No warning.");
+
+    let destination = std::env::temp_dir().join(format!(
+        "dd-mapper-caves-{}.dungeondraft_map",
+        std::process::id()
+    ));
+    let save = json!({"map_id": "map-1", "path": destination.display().to_string()});
+    ok_text(&call(&client, "map_save", save).await);
+    let saved = MapFile::parse(&std::fs::read_to_string(&destination).unwrap()).unwrap();
+    std::fs::remove_file(&destination).unwrap();
+    let cave = &saved.world().levels["0"].cave;
+    assert!(cave.bitmap.0.iter().any(|byte| *byte != 0));
+    assert!(cave.entrance_bitmap.0.iter().any(|byte| *byte != 0));
     client.cancel().await.unwrap();
 }
 
@@ -402,7 +459,7 @@ async fn exposes_the_catalog_summary_as_a_resource() {
         read["contents"][0]["text"]
             .as_str()
             .unwrap()
-            .starts_with("8 assets.")
+            .starts_with("9 assets.")
     );
     client.cancel().await.unwrap();
 }

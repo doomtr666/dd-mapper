@@ -25,6 +25,8 @@ pub struct Prop {
     pub center: CellPosition,
     pub rotation: QuarterTurn,
     pub footprint: Footprint,
+    /// ARGB custom color, for assets Dungeondraft lets color.
+    pub tint: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Error)]
@@ -155,6 +157,7 @@ mod tests {
             center: CellPosition::new(5.0, 5.0),
             rotation: QuarterTurn::Deg90,
             footprint: Footprint::new(2.0, 1.0).unwrap(),
+            tint: None,
         };
         assert_eq!(
             prop.bounds(),

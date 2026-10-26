@@ -2,7 +2,7 @@
 
 use dd_domain::{Cell, CellPoint, CellPosition, GridSize};
 use tiny_skia::{
-    Color, FillRule, LineCap, Mask, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform,
+    Color, FillRule, LineCap, LineJoin, Mask, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform,
 };
 
 use crate::palette::Rgb;
@@ -201,6 +201,36 @@ impl Canvas {
     pub fn stroke_ring(&mut self, ring: &[CellPoint], rgb: Rgb, width_px: f32) {
         let positions: Vec<CellPosition> = ring.iter().map(|point| position_of(*point)).collect();
         self.stroke_closed(&positions, rgb, width_px);
+    }
+
+    /// An open line through `points`, with round joins and ends.
+    pub fn stroke_through(&mut self, points: &[CellPosition], rgb: Rgb, style: LineStyle) {
+        let Some((first, others)) = points.split_first() else {
+            return;
+        };
+        let mut builder = PathBuilder::new();
+        let (x, y) = self.to_pixels(*first);
+        builder.move_to(x, y);
+        for point in others {
+            let (x, y) = self.to_pixels(*point);
+            builder.line_to(x, y);
+        }
+        let Some(path) = builder.finish() else {
+            return;
+        };
+        let stroke = Stroke {
+            width: style.width_px,
+            line_cap: LineCap::Round,
+            line_join: LineJoin::Round,
+            ..Stroke::default()
+        };
+        self.pixmap.stroke_path(
+            &path,
+            &paint(rgb, style.alpha),
+            &stroke,
+            Transform::identity(),
+            None,
+        );
     }
 
     pub fn line(&mut self, from: CellPosition, to: CellPosition, rgb: Rgb, style: LineStyle) {

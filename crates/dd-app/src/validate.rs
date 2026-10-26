@@ -6,8 +6,8 @@ use crate::ids::{prop_label, room_label};
 
 /// Warnings about `map`, empty when nothing looks wrong.
 pub fn validate(map: &Map) -> Vec<String> {
-    if map.rooms().next().is_none() {
-        return vec!["the map has no room".to_owned()];
+    if map.rooms().next().is_none() && map.cave().floor_samples() == 0 {
+        return vec!["the map has no room nor cave".to_owned()];
     }
     let mut warnings = rooms_without_doors(map);
     warnings.extend(misplaced_props(map));
@@ -29,18 +29,17 @@ fn rooms_without_doors(map: &Map) -> Vec<String> {
 fn misplaced_props(map: &Map) -> Vec<String> {
     map.props()
         .filter_map(|(id, prop)| {
-            let room = map
-                .rooms()
-                .map(|(_, room)| room)
-                .find(|room| room.outline().contains_position(prop.center));
-            match room {
-                None => Some(format!("prop {} is outside every room", prop_label(id))),
-                Some(room) if crosses_walls(room, prop) => Some(format!(
+            if map.rooms().any(|(_, room)| crosses_walls(room, prop)) {
+                return Some(format!(
                     "prop {} crosses a wall or a pillar",
                     prop_label(id)
-                )),
-                Some(_) => None,
+                ));
             }
+            let in_room = map
+                .rooms()
+                .any(|(_, room)| room.outline().contains_position(prop.center));
+            (!in_room && !map.cave().is_floor_at(prop.center))
+                .then(|| format!("prop {} is outside every room and cave", prop_label(id)))
         })
         .collect()
 }
@@ -174,6 +173,7 @@ mod tests {
             center: CellPosition::new(x, y),
             rotation: QuarterTurn::Deg0,
             footprint: Footprint::new(1.0, 1.0).unwrap(),
+            tint: None,
         })
         .unwrap();
     }
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn warns_about_an_empty_map() {
         let map = Map::new(GridSize::new(5, 5).unwrap());
-        assert_eq!(validate(&map), ["the map has no room"]);
+        assert_eq!(validate(&map), ["the map has no room nor cave"]);
     }
 
     #[test]
@@ -208,11 +208,21 @@ mod tests {
         assert_eq!(
             validate(&map),
             [
-                "prop P0 is outside every room",
+                "prop P0 is outside every room and cave",
                 "prop P1 crosses a wall or a pillar",
                 "prop P2 crosses a wall or a pillar",
             ]
         );
+    }
+
+    #[test]
+    fn warns_about_cave_props_across_room_walls() {
+        let (mut map, room) = map_with_room();
+        add_door(&mut map, room);
+        map.cave_mut().dig(|position| position.x < 12.0, true);
+        add_prop(&mut map, 9.0, 2.0);
+        add_prop(&mut map, 6.3, 2.0);
+        assert_eq!(validate(&map), ["prop P1 crosses a wall or a pillar"]);
     }
 
     #[test]

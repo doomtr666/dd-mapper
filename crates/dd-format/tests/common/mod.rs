@@ -10,10 +10,11 @@ use std::path::Path;
 use dd_format::model::{MapFile, NodeId};
 
 /// Maps saved by Dungeondraft 1.2.0.1: the source of truth of the format.
-pub const FIXTURES: [&str; 3] = [
+pub const FIXTURES: [&str; 4] = [
     "test.dungeondraft_map",
     "test2.dungeondraft_map",
     "doors_and_free_walls.dungeondraft_map",
+    "cave_and_paths.dungeondraft_map",
 ];
 
 pub fn read_fixture(name: &str) -> String {

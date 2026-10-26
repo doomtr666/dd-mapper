@@ -21,10 +21,11 @@ use rmcp::{ErrorData, RoleServer, ServerHandler, tool, tool_handler, tool_router
 
 use crate::guidance::{DESIGN_PROMPT_DESCRIPTION, DESIGN_PROMPT_NAME, INSTRUCTIONS, design_prompt};
 use crate::params::{
-    CatalogSearchParams, DEFAULT_PIXELS_PER_CELL, DoorAddParams, FloorPaintParams,
-    LayoutGenerateParams, LightAddParams, MapAmbientParams, MapBackgroundParams, MapIdParams,
-    MapNewParams, MapOpenParams, MapPreviewParams, MapSaveParams, PatternAddParams,
-    PropPlaceParams, PropRemoveParams, PropScatterParams, RoomAddParams, WallAddParams,
+    CatalogSearchParams, CaveCarveParams, CaveEntranceParams, CaveGenerateParams,
+    DEFAULT_PIXELS_PER_CELL, DoorAddParams, FloorPaintParams, LayoutGenerateParams, LightAddParams,
+    MapAmbientParams, MapBackgroundParams, MapIdParams, MapNewParams, MapOpenParams,
+    MapPreviewParams, MapSaveParams, PathAddParams, PatternAddParams, PropPlaceParams,
+    PropRemoveParams, PropScatterParams, RoomAddParams, WallAddParams,
 };
 
 const SERVER_NAME: &str = "dd-mapper";
@@ -94,6 +95,43 @@ ship_deck (a hab block with a bow). Returns the map_id; then furnish it."
     }
 
     #[tool(
+        description = "Grow a network of caverns over a rectangle of cells, with natural \
+rock walls; every part can be reached. Combine it with cave_carve to add chambers and \
+tunnels, and cave_entrance where paths come in."
+    )]
+    fn cave_generate(&self, Parameters(params): Parameters<CaveGenerateParams>) -> CallToolResult {
+        let map = params.map_id.clone();
+        let network = dd_app::CaveNetwork::from(params);
+        let dug = self.with_workspace(|workspace| workspace.grow_caves(&map, &network));
+        reply(dug.map(|samples| format!("Dug about {} cells of cave.", cells(samples))))
+    }
+
+    #[tool(
+        description = "Dig a cave shape, or fill it back with rock: a chamber (center and \
+radius), a tunnel (points and width), or an exact rectangle or polygon for mines. Chambers \
+and tunnels get natural walls; roughness sets how jagged."
+    )]
+    fn cave_carve(&self, Parameters(params): Parameters<CaveCarveParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        let verb = if request.fill { "Filled" } else { "Dug" };
+        let changed = self.with_workspace(|workspace| workspace.carve_cave(&map, &request));
+        reply(changed.map(|samples| format!("{verb} about {} cells.", cells(samples))))
+    }
+
+    #[tool(
+        description = "Leave the cave walls open over a shape, where a path, a road or a \
+door enters the cave; put it on the cave's edge."
+    )]
+    fn cave_entrance(&self, Parameters(params): Parameters<CaveEntranceParams>) -> CallToolResult {
+        let shape = params.shape.into();
+        let opened =
+            self.with_workspace(|workspace| workspace.open_cave_entrance(&params.map_id, &shape));
+        reply(
+            opened.map(|samples| format!("Opened the walls over about {} cells.", cells(samples))),
+        )
+    }
+
+    #[tool(
         description = "Add a walled room: a rectangle or polygon on grid vertices, with \
 optional pillars, a floor tileset and a wall texture (asset paths from catalog_search). \
 Rooms sharing area or a wall length merge, like with Dungeondraft's room tool. \
@@ -131,6 +169,16 @@ degrees. Its footprint is the asset's real size. Returns the prop id."
     fn prop_place(&self, Parameters(params): Parameters<PropPlaceParams>) -> CallToolResult {
         let (map, request) = params.into_request();
         reply(self.with_workspace(|workspace| workspace.place_prop(&map, &request)))
+    }
+
+    #[tool(
+        description = "Draw a path (kind path) along a line of points in cells: conveyor \
+belts, cables, pipes, rails, worn trails. Points may lie anywhere, even off the map's edges, \
+so that a road or a belt can leave the map. Returns the path id (T0...)."
+    )]
+    fn path_add(&self, Parameters(params): Parameters<PathAddParams>) -> CallToolResult {
+        let (map, request) = params.into_request();
+        reply(self.with_workspace(|workspace| workspace.add_path(&map, &request)))
     }
 
     #[tool(
@@ -383,6 +431,12 @@ fn room_report(report: &RoomReport) -> String {
         ));
     }
     parts.join("; ")
+}
+
+/// Quarter-cell samples as whole cells, sixteen to a cell.
+fn cells(samples: usize) -> f64 {
+    let samples = u32::try_from(samples).unwrap_or(u32::MAX);
+    (f64::from(samples) / 16.0).round()
 }
 
 fn scatter_report(report: &ScatterReport) -> String {

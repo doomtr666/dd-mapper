@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use dd_catalog::{Asset, AssetKind, AssetQuery, Catalog};
 use dd_domain::{
     CellPoint, CellPosition, Door, Footprint, Glow, GridSize, Light, Map, MapError, Partition,
-    Pattern, Prop, QuarterTurn, Room, WallPosition,
+    Pattern, Prop, QuarterTurn, Room, Track, WallPosition,
 };
 
 use crate::assets::resolve;
@@ -17,12 +17,12 @@ use crate::doors::{
 };
 use crate::ids::{
     WallOwner, door_label, light_label, map_label, parse_map, parse_prop, parse_wall_owner,
-    partition_label, pattern_label, prop_label, room_label,
+    partition_label, pattern_label, prop_label, room_label, track_label,
 };
 use crate::validate::validate;
 use crate::{
-    AppError, DoorRequest, FloorRequest, LightRequest, MapFiles, PatternRequest, PreviewRenderer,
-    PropRequest, RoomRequest, SaveFacts, WallRequest,
+    AppError, DoorRequest, FloorRequest, LightRequest, MapFiles, PathRequest, PatternRequest,
+    PreviewRenderer, PropRequest, RoomRequest, SaveFacts, WallRequest,
 };
 
 /// Pixels per cell in the editor, to turn portal radii into cells.
@@ -36,6 +36,8 @@ const DEFAULT_LIGHT_INTENSITY: f64 = 1.0;
 const DEFAULT_LIGHT_COLOR: u32 = 0xffec_cd8b;
 /// Opaque white: the texture as it is.
 const UNTINTED: u32 = 0xffff_ffff;
+/// Width of paths when none is given, in cells.
+const DEFAULT_PATH_WIDTH: f64 = 1.0;
 /// Footprint of props whose size is unknown, in cells.
 const DEFAULT_PROP_SIDE: f64 = 1.0;
 
@@ -160,6 +162,26 @@ impl Workspace {
         })
     }
 
+    /// Draws a path, such as a conveyor belt or a cable, and returns its id.
+    ///
+    /// # Errors
+    /// Fails on an unknown map or path asset, fewer than two points, a width
+    /// that is not positive, or a path wholly outside the map.
+    pub fn add_path(&mut self, map: &str, request: &PathRequest) -> Result<String, AppError> {
+        let asset = resolve(&self.catalog, &request.asset, AssetKind::Path)?
+            .path
+            .clone();
+        let points = request
+            .points
+            .iter()
+            .map(|&(x, y)| CellPosition::new(x, y))
+            .collect();
+        let width = request.width.unwrap_or(DEFAULT_PATH_WIDTH);
+        let track = Track::new(asset, points, width, request.closed)?;
+        let id = self.map_mut(map)?.add_track(track)?;
+        Ok(track_label(id))
+    }
+
     /// Repaints the floor under an area; returns how many cells changed.
     ///
     /// # Errors
@@ -261,6 +283,7 @@ impl Workspace {
             center: CellPosition::new(request.x, request.y),
             rotation: QuarterTurn::from_degrees(request.rotation_degrees)?,
             footprint: footprint(asset)?,
+            tint: request.color.as_deref().map(parse_color).transpose()?,
         };
         let id = self.map_mut(map)?.add_prop(prop)?;
         Ok(prop_label(id))
@@ -457,11 +480,11 @@ pub(crate) mod tests {
     use dd_domain::{Map, PropError};
 
     use super::{RoomReport, Workspace};
-    use crate::assets::tests::{CRATE, DOOR, FLOOR, GRATE, LIGHT, VOID, WALL, small_catalog};
+    use crate::assets::tests::{BELT, CRATE, DOOR, FLOOR, GRATE, LIGHT, VOID, WALL, small_catalog};
     use crate::{
         AppError, DoorRequest, FloorRequest, FootprintOf, LightRequest, MapFiles, OpenedMap,
-        PatternRequest, PortError, PreviewRenderer, PropRequest, RoomRequest, SaveFacts, Shape,
-        WallRequest,
+        PathRequest, PatternRequest, PortError, PreviewRenderer, PropRequest, RoomRequest,
+        SaveFacts, Shape, WallRequest,
     };
 
     /// What a save was asked: destination, facts, template and room count.
@@ -554,7 +577,33 @@ pub(crate) mod tests {
             x,
             y,
             rotation_degrees,
+            color: None,
         }
+    }
+
+    #[test]
+    fn props_can_be_colored() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        let green = PropRequest {
+            color: Some("33ff33".to_owned()),
+            ..crate_at(5.0, 5.0, 0)
+        };
+        workspace.place_prop(&map, &green).unwrap();
+        assert!(
+            workspace
+                .describe(&map)
+                .unwrap()
+                .contains("2 x 1.5 cells, tint ff33ff33")
+        );
+        let unknown = PropRequest {
+            color: Some("acid".to_owned()),
+            ..crate_at(8.0, 5.0, 0)
+        };
+        assert_eq!(
+            workspace.place_prop(&map, &unknown),
+            Err(AppError::InvalidColor("acid".to_owned()))
+        );
     }
 
     #[test]
@@ -562,10 +611,10 @@ pub(crate) mod tests {
         let (workspace, _) = workspace();
         assert_eq!(
             workspace.catalog_summary(),
-            "8 assets.\n\
-             By pack: LOREGD01 (7), default (1).\n\
+            "9 assets.\n\
+             By pack: LOREGD01 (8), default (1).\n\
              By kind: tilesets (1), walls (1), portals (1), objects (2), lights (1), patterns (1), \
-             terrain (1).\n"
+             terrain (1), paths (1).\n"
         );
     }
 
@@ -766,6 +815,34 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn paths_run_through_their_points() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        let belt = PathRequest {
+            asset: BELT.to_owned(),
+            points: vec![(1.0, 2.0), (6.5, 2.0), (6.5, 5.0)],
+            width: Some(1.5),
+            closed: false,
+        };
+        assert_eq!(workspace.add_path(&map, &belt), Ok("T0".to_owned()));
+        let description = workspace.describe(&map).unwrap();
+        assert!(
+            description.contains(
+                "T0: Path_Conveyor_Belt_Large through (1, 2) - (6.5, 2) - (6.5, 5), 1.5 cells wide"
+            ),
+            "{description}"
+        );
+        let crate_path = PathRequest {
+            asset: CRATE.to_owned(),
+            ..belt
+        };
+        assert!(matches!(
+            workspace.add_path(&map, &crate_path),
+            Err(AppError::WrongAssetKind { .. })
+        ));
+    }
+
+    #[test]
     fn the_ambient_light_dims_the_whole_map() {
         let (mut workspace, _) = workspace();
         let map = workspace.new_map(30, 20).unwrap();
@@ -899,7 +976,7 @@ pub(crate) mod tests {
         let map = workspace.new_map(30, 20).unwrap();
         assert_eq!(
             workspace.validate(&map),
-            Ok(vec!["the map has no room".to_owned()])
+            Ok(vec!["the map has no room nor cave".to_owned()])
         );
     }
 

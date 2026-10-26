@@ -25,6 +25,7 @@ fn glyph(character: char) -> Option<Glyph> {
         'L' => [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f],
         'P' => [0x1e, 0x11, 0x11, 0x1e, 0x10, 0x10, 0x10],
         'R' => [0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11],
+        'T' => [0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
         'W' => [0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0a],
         _ => return None,
     };
@@ -73,6 +74,13 @@ mod tests {
         assert!(one.contains(&(1, 1)));
         let shifted = lit_dots("11");
         assert!(shifted.contains(&(6 + 2, 0)));
+    }
+
+    #[test]
+    fn every_id_prefix_on_previews_has_a_glyph() {
+        for prefix in ["R", "D", "P", "L", "W", "T"] {
+            assert!(!lit_dots(prefix).is_empty(), "{prefix} has no glyph");
+        }
     }
 
     #[test]

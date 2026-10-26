@@ -77,6 +77,7 @@ fn add_crates(map: &mut Map) -> Result<(), Box<dyn Error>> {
             center: CellPosition::new(x, 3.5),
             rotation,
             footprint,
+            tint: None,
         })?;
     }
     Ok(())

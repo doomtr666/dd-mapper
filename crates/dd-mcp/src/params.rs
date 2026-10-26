@@ -1,8 +1,9 @@
 //! Tool parameters, as the model sends them. Positions and sizes are in cells.
 
 use dd_app::{
-    DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest, FloorRequest, Generator, LayoutRequest,
-    LightRequest, PatternRequest, PropRequest, RoomRequest, ScatterRequest, Shape, WallRequest,
+    CaveNetwork, CaveRequest, CaveShape, DEFAULT_MARGIN, DEFAULT_MIN_ROOM, DoorRequest,
+    FloorRequest, Generator, LayoutRequest, LightRequest, PathRequest, PatternRequest, PropRequest,
+    RoomRequest, ScatterRequest, Shape, WallRequest,
 };
 use dd_catalog::{AssetKind, AssetQuery};
 use schemars::JsonSchema;
@@ -202,6 +203,9 @@ pub struct PropPlaceParams {
     /// Clockwise rotation in degrees: 0, 90, 180 or 270.
     #[serde(default)]
     pub rotation: i32,
+    /// `RRGGBB` or `AARRGGBB` custom color, for assets Dungeondraft lets color
+    /// (stains, puddles, cloth, colorable `_CLR` objects).
+    pub color: Option<String>,
 }
 
 impl PropPlaceParams {
@@ -211,6 +215,7 @@ impl PropPlaceParams {
             x: self.x,
             y: self.y,
             rotation_degrees: self.rotation,
+            color: self.color,
         };
         (self.map_id, request)
     }
@@ -374,6 +379,9 @@ pub struct PropScatterParams {
     /// lockers, shelves, barrels, pipes, consoles. Off by default.
     #[serde(default)]
     pub along_walls: bool,
+    /// `RRGGBB` or `AARRGGBB` custom color given to every prop, such as a
+    /// sickly green for acid puddles.
+    pub color: Option<String>,
 }
 
 impl PropScatterParams {
@@ -384,6 +392,7 @@ impl PropScatterParams {
             count: self.count,
             seed: self.seed,
             along_walls: self.along_walls,
+            color: self.color,
         };
         (self.map_id, request)
     }
@@ -421,4 +430,141 @@ pub struct MapAmbientParams {
     /// `RRGGBB` or `AARRGGBB`: white is full daylight, `404858` a dim underhive,
     /// `202838` the dark of a derelict.
     pub color: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct PathAddParams {
+    pub map_id: String,
+    /// Asset path of a path texture (`catalog_search` kind `path`): conveyor
+    /// belts, cables, pipes, rails, trails.
+    pub asset: String,
+    /// The line, as `[x, y]` positions in cells; they need not sit on grid
+    /// vertices, and may run off the map's edges.
+    pub points: Vec<[f64; 2]>,
+    /// Width in cells, 1 by default.
+    pub width: Option<f64>,
+    /// Back to the first point, such as a conveyor loop.
+    #[serde(default)]
+    pub closed: bool,
+}
+
+impl PathAddParams {
+    pub fn into_request(self) -> (String, PathRequest) {
+        let request = PathRequest {
+            asset: self.asset,
+            points: self.points.into_iter().map(|[x, y]| (x, y)).collect(),
+            width: self.width,
+            closed: self.closed,
+        };
+        (self.map_id, request)
+    }
+}
+
+/// Default roughness of dug walls: natural, without spikes.
+const DEFAULT_ROUGHNESS: f64 = 0.4;
+
+/// What to dig, in cells.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CaveShapeParams {
+    /// A round chamber.
+    Chamber { x: f64, y: f64, radius: f64 },
+    /// A gallery along `[x, y]` points.
+    Tunnel { points: Vec<[f64; 2]>, width: f64 },
+    /// Exactly a rectangle on grid vertices: straight walls, for mines.
+    Rectangle {
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    },
+    /// Exactly a polygon on grid vertices, as `[x, y]` pairs.
+    Polygon { points: Vec<[i32; 2]> },
+}
+
+impl From<CaveShapeParams> for CaveShape {
+    fn from(shape: CaveShapeParams) -> Self {
+        match shape {
+            CaveShapeParams::Chamber { x, y, radius } => Self::Chamber { x, y, radius },
+            CaveShapeParams::Tunnel { points, width } => Self::Tunnel {
+                points: points.into_iter().map(|[x, y]| (x, y)).collect(),
+                width,
+            },
+            CaveShapeParams::Rectangle {
+                x,
+                y,
+                width,
+                height,
+            } => Self::Area(Shape::Rectangle {
+                x,
+                y,
+                width,
+                height,
+            }),
+            CaveShapeParams::Polygon { points } => Self::Area(Shape::Polygon(
+                points.into_iter().map(|[x, y]| (x, y)).collect(),
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CaveCarveParams {
+    pub map_id: String,
+    pub shape: CaveShapeParams,
+    /// Fill the shape with rock instead of digging it.
+    #[serde(default)]
+    pub fill: bool,
+    /// From 0 (smooth) to 1 (jagged) walls for chambers and tunnels, 0.4 by default.
+    pub roughness: Option<f64>,
+    /// The same seed gives the same walls.
+    #[serde(default)]
+    pub seed: u64,
+}
+
+impl CaveCarveParams {
+    pub fn into_request(self) -> (String, CaveRequest) {
+        let request = CaveRequest {
+            shape: self.shape.into(),
+            fill: self.fill,
+            roughness: self.roughness.unwrap_or(DEFAULT_ROUGHNESS),
+            seed: self.seed,
+        };
+        (self.map_id, request)
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CaveEntranceParams {
+    pub map_id: String,
+    /// Where the cave walls stay open, usually a small chamber on the cave's edge.
+    pub shape: CaveShapeParams,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CaveGenerateParams {
+    pub map_id: String,
+    /// The rectangle of cells to grow caverns in; its border stays rock.
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    /// Share of rock to start from, 0.47 by default: 0.42 is open, 0.52 narrow.
+    pub density: Option<f64>,
+    /// The same seed grows the same network.
+    #[serde(default)]
+    pub seed: u64,
+}
+
+impl From<CaveGenerateParams> for CaveNetwork {
+    fn from(params: CaveGenerateParams) -> Self {
+        Self {
+            x: params.x,
+            y: params.y,
+            width: params.width,
+            height: params.height,
+            density: params.density,
+            seed: params.seed,
+        }
+    }
 }

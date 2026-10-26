@@ -3,6 +3,7 @@
 //! Only what the domain models is rewritten (walls, doors, floor shapes,
 //! tiles, empty cave and terrain, node ids); the template provides the rest.
 
+mod cave;
 mod ground;
 mod lights;
 mod node_ids;
@@ -13,6 +14,7 @@ mod pixels;
 mod portal;
 mod shapes;
 mod tiles;
+mod tracks;
 mod walls;
 
 pub use self::pixels::CELL_SIZE_PX;
@@ -22,6 +24,8 @@ use std::collections::HashMap;
 use dd_domain::{AssetPath, Door, GridSize, Map, WallRef};
 use thiserror::Error;
 
+pub use self::cave::unpack as unpack_cave;
+use self::cave::write_cave;
 use self::ground::{blank_cave, blank_terrain};
 use self::lights::build_light;
 use self::node_ids::NodeIdAllocator;
@@ -31,9 +35,12 @@ use self::patterns::build_pattern;
 use self::portal::{PortalSpec, build_portal};
 use self::shapes::build_shapes;
 use self::tiles::build_tiles;
+use self::tracks::build_path;
 use self::walls::{build_free_wall, build_wall};
 use crate::Preserved;
-use crate::model::{Color, Environment, Level, Light, MapFile, NodeId, Object, Pattern, Wall};
+use crate::model::{
+    Color, Environment, Level, Light, MapFile, NodeId, Object, Path, Pattern, Wall,
+};
 
 const GROUND_LEVEL: &str = "0";
 
@@ -107,6 +114,10 @@ pub fn export_map(
         .patterns()
         .map(|(_, pattern)| build_pattern(pattern, ids.allocate()))
         .collect();
+    let paths: Vec<Path> = map
+        .tracks()
+        .map(|(_, track)| build_path(track, ids.allocate()))
+        .collect();
     let mut file = template.clone();
     let world = file.world_mut();
     let resized = (world.width, world.height) != (map.grid().width(), map.grid().height());
@@ -125,19 +136,24 @@ pub fn export_map(
             objects,
             lights,
             patterns,
+            paths,
         },
     );
     if resized {
         reset_ground(level, map.grid());
     }
+    write_cave(&mut level.cave, map.cave());
     if let Some(background) = map.background() {
         cover_terrain(level, map.grid(), background);
     }
     if let Some(argb) = map.ambient_light() {
         set_ambient_light(level, Color(argb));
     }
+    let cave_texture = (!map.cave().is_empty()).then(|| level.cave.texture.clone());
+    let mut used: Vec<&str> = map.assets().map(AssetPath::as_str).collect();
+    used.extend(cave_texture.as_deref());
     if let Some(header) = file.header_mut() {
-        declare_packs(header, map, settings);
+        declare_packs(header, &used, settings);
     }
     Ok(file)
 }
@@ -148,6 +164,7 @@ struct Nodes {
     objects: Vec<Object>,
     lights: Vec<Light>,
     patterns: Vec<Pattern>,
+    paths: Vec<Path>,
 }
 
 /// Every wall, room walls first, with the ids of the room walls.
@@ -190,6 +207,7 @@ fn write_level(level: &mut Level, map: &Map, nodes: Nodes) {
         objects,
         lights,
         patterns,
+        paths,
     } = nodes;
     let BuiltWalls {
         walls,
@@ -202,6 +220,7 @@ fn write_level(level: &mut Level, map: &Map, nodes: Nodes) {
     level.objects = objects.into_iter().map(Preserved::new).collect();
     level.lights = lights.into_iter().map(Preserved::new).collect();
     level.patterns = patterns.into_iter().map(Preserved::new).collect();
+    level.paths = paths.into_iter().map(Preserved::new).collect();
 }
 
 /// Builds one wall per room wall loop, then one per partition,
@@ -333,6 +352,7 @@ mod tests {
             center: dd_domain::CellPosition::new(2.5, 0.5),
             rotation: dd_domain::QuarterTurn::Deg0,
             footprint: dd_domain::Footprint::new(1.0, 1.0).unwrap(),
+            tint: None,
         })
         .unwrap();
         let exported = export_map(&map, &template(), &ExportSettings::default()).unwrap();
@@ -350,6 +370,7 @@ mod tests {
             center: dd_domain::CellPosition::new(2.5, 0.5),
             rotation: dd_domain::QuarterTurn::Deg0,
             footprint: dd_domain::Footprint::new(1.0, 1.0).unwrap(),
+            tint: None,
         }
     }
 
@@ -483,6 +504,38 @@ mod tests {
                 .unwrap()
                 .contains("\"baked_lighting\": true,\n\t\t\t\t\t\"ambient_light\": \"ff404858\"")
         );
+    }
+
+    #[test]
+    fn caves_bring_in_their_texture() {
+        let mut map = Map::new(GridSize::new(48, 27).unwrap());
+        let plain = export_map(&map, &template(), &ExportSettings::default()).unwrap();
+        assert!(!plain.header().unwrap().uses_default_assets);
+        map.cave_mut()
+            .dig(|position| position.x < 4.0 && position.y < 4.0, true);
+        let dug = export_map(&map, &template(), &ExportSettings::default()).unwrap();
+        assert!(dug.header().unwrap().uses_default_assets);
+    }
+
+    #[test]
+    fn tracks_become_paths_after_patterns() {
+        let mut map = Map::new(GridSize::new(10, 8).unwrap());
+        let cable = dd_domain::Track::new(
+            AssetPath::new("res://textures/paths/rope_(thick).png").unwrap(),
+            vec![
+                dd_domain::CellPosition::new(1.0, 1.0),
+                dd_domain::CellPosition::new(4.0, 1.0),
+            ],
+            0.5,
+            false,
+        )
+        .unwrap();
+        map.add_track(cable).unwrap();
+        let exported = export_map(&map, &template(), &ExportSettings::default()).unwrap();
+        let paths = &exported.world().levels["0"].paths;
+        assert_eq!(paths.len(), 1);
+        assert_eq!(paths[0].node_id, NodeId(0));
+        assert_eq!(exported.world().next_node_id, NodeId(1));
     }
 
     #[test]

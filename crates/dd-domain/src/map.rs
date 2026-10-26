@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use thiserror::Error;
 
 use crate::{
-    AssetPath, Cell, CellPoint, CellPosition, GridSize, Light, MergeError, Partition, Pattern,
-    Polygon, Prop, Room, Segment, WallLoop, joins, merge,
+    AssetPath, CaveGrid, Cell, CellPoint, CellPosition, GridSize, Light, MergeError, Partition,
+    Pattern, Polygon, Prop, Room, Segment, Track, WallLoop, joins, merge,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -24,6 +24,9 @@ pub struct LightId(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PatternId(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct TrackId(pub u32);
 
 /// A wall that can hold doors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -85,6 +88,8 @@ pub enum MapError {
     PropOutsideGrid { center: CellPosition },
     #[error("floor vertex ({}, {}) lies outside the map", vertex.x, vertex.y)]
     FloorOutsideGrid { vertex: CellPoint },
+    #[error("the path lies wholly outside the map")]
+    TrackOutsideGrid,
     #[error("there is no prop {0:?}")]
     UnknownProp(PropId),
 }
@@ -100,6 +105,8 @@ pub struct Map {
     partitions: Vec<(PartitionId, Partition)>,
     lights: Vec<(LightId, Light)>,
     patterns: Vec<(PatternId, Pattern)>,
+    tracks: Vec<(TrackId, Track)>,
+    cave: CaveGrid,
     /// Terrain texture covering the whole ground, under rooms.
     background: Option<AssetPath>,
     /// ARGB light everywhere, before lights add theirs.
@@ -110,6 +117,7 @@ pub struct Map {
     next_partition_id: u32,
     next_light_id: u32,
     next_pattern_id: u32,
+    next_track_id: u32,
 }
 
 impl Map {
@@ -124,6 +132,8 @@ impl Map {
             partitions: Vec::new(),
             lights: Vec::new(),
             patterns: Vec::new(),
+            tracks: Vec::new(),
+            cave: CaveGrid::new(grid),
             background: None,
             ambient_light: None,
             next_room_id: 0,
@@ -132,6 +142,7 @@ impl Map {
             next_partition_id: 0,
             next_light_id: 0,
             next_pattern_id: 0,
+            next_track_id: 0,
         }
     }
 
@@ -470,6 +481,16 @@ impl Map {
         self.patterns.iter().map(|(id, pattern)| (*id, pattern))
     }
 
+    #[must_use]
+    pub fn cave(&self) -> &CaveGrid {
+        &self.cave
+    }
+
+    /// Caves are dug freely: no wall or room depends on them.
+    pub fn cave_mut(&mut self) -> &mut CaveGrid {
+        &mut self.cave
+    }
+
     pub fn set_ambient_light(&mut self, argb: u32) {
         self.ambient_light = Some(argb);
     }
@@ -488,6 +509,27 @@ impl Map {
         self.background.as_ref()
     }
 
+    /// Adds a track; like in Dungeondraft, it may run off the edges of the map.
+    ///
+    /// # Errors
+    /// Fails when no point of the track lies on the map.
+    pub fn add_track(&mut self, track: Track) -> Result<TrackId, MapError> {
+        if !track
+            .points()
+            .iter()
+            .any(|point| self.grid.contains_position(*point))
+        {
+            return Err(MapError::TrackOutsideGrid);
+        }
+        let id = TrackId(allocate(&mut self.next_track_id));
+        self.tracks.push((id, track));
+        Ok(id)
+    }
+
+    pub fn tracks(&self) -> impl Iterator<Item = (TrackId, &Track)> {
+        self.tracks.iter().map(|(id, track)| (*id, track))
+    }
+
     /// Every asset the map uses, once per use.
     pub fn assets(&self) -> impl Iterator<Item = &AssetPath> {
         let rooms = self.rooms.iter().map(|(_, room)| room.wall());
@@ -499,6 +541,7 @@ impl Map {
         let props = self.props.iter().map(|(_, prop)| &prop.asset);
         let lights = self.lights.iter().map(|(_, light)| &light.asset);
         let patterns = self.patterns.iter().map(|(_, pattern)| &pattern.asset);
+        let tracks = self.tracks.iter().map(|(_, track)| track.asset());
         self.floor
             .values()
             .chain(rooms)
@@ -507,6 +550,7 @@ impl Map {
             .chain(props)
             .chain(lights)
             .chain(patterns)
+            .chain(tracks)
             .chain(self.background.iter())
     }
 
@@ -539,11 +583,11 @@ fn allocate(next_id: &mut u32) -> u32 {
 mod tests {
     use super::{
         AddedRoom, Door, DoorId, LightId, Map, MapError, PartitionId, PatternId, PropId, RoomId,
-        WallPosition, WallRef,
+        TrackId, WallPosition, WallRef,
     };
     use crate::{
         AssetPath, Cell, CellPoint, CellPosition, Footprint, Glow, GridSize, Light, Partition,
-        Pattern, Polygon, Prop, QuarterTurn, Room, WallLoop,
+        Pattern, Polygon, Prop, QuarterTurn, Room, Track, WallLoop,
     };
 
     fn map() -> Map {
@@ -701,6 +745,7 @@ mod tests {
             center: CellPosition::new(x, y),
             rotation: QuarterTurn::Deg0,
             footprint: Footprint::new(1.0, 1.0).unwrap(),
+            tint: None,
         }
     }
 
@@ -788,6 +833,43 @@ mod tests {
                 "wall.webp"
             ]
         );
+    }
+
+    fn belt(points: &[(f64, f64)]) -> Track {
+        let points = points
+            .iter()
+            .map(|&(x, y)| CellPosition::new(x, y))
+            .collect();
+        Track::new(AssetPath::new("belt.webp").unwrap(), points, 1.0, false).unwrap()
+    }
+
+    #[test]
+    fn tracks_get_distinct_ids_and_may_leave_the_map() {
+        let mut map = map();
+        assert_eq!(
+            map.add_track(belt(&[(1.0, 1.0), (5.0, 1.0)])),
+            Ok(TrackId(0))
+        );
+        assert_eq!(
+            map.add_track(belt(&[(1.0, 2.0), (40.0, 2.0)])),
+            Ok(TrackId(1))
+        );
+        assert_eq!(map.tracks().count(), 2);
+        assert_eq!(
+            map.add_track(belt(&[(40.0, 1.0), (50.0, 1.0)])),
+            Err(MapError::TrackOutsideGrid)
+        );
+        assert!(map.assets().any(|asset| asset.as_str() == "belt.webp"));
+    }
+
+    #[test]
+    fn caves_cover_the_whole_map() {
+        let mut map = map();
+        assert!(map.cave().is_empty());
+        assert_eq!((map.cave().columns(), map.cave().rows()), (143, 83));
+        map.cave_mut()
+            .dig(|position| position.x < 3.0 && position.y < 3.0, true);
+        assert!(map.cave().is_floor_at(CellPosition::new(1.0, 1.0)));
     }
 
     #[test]

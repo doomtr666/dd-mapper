@@ -42,6 +42,18 @@ pub struct RoomRequest {
     pub wall: String,
 }
 
+/// A texture drawn along a line through `points`: conveyor belts, cables,
+/// pipes, trails. Points need not sit on grid vertices.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PathRequest {
+    pub asset: String,
+    pub points: Vec<(f64, f64)>,
+    /// In cells; one cell when unset.
+    pub width: Option<f64>,
+    /// Back to the first point, such as a conveyor loop.
+    pub closed: bool,
+}
+
 /// A floor tileset painted over an area, such as one room of a building.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FloorRequest {
@@ -97,4 +109,6 @@ pub struct PropRequest {
     pub x: f64,
     pub y: f64,
     pub rotation_degrees: i32,
+    /// `RRGGBB` or `AARRGGBB` custom color, for assets Dungeondraft lets color.
+    pub color: Option<String>,
 }

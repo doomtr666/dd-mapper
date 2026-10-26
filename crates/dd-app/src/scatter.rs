@@ -6,6 +6,7 @@ use dd_domain::{AssetPath, CellPosition, Footprint, Map, Polygon, Prop, QuarterT
 use dd_gen::Random;
 
 use crate::assets::resolve;
+use crate::color::parse_color;
 use crate::ids::prop_label;
 use crate::validate::{boxes_overlap, crosses_box, crosses_walls};
 use crate::workspace::footprint;
@@ -35,6 +36,8 @@ pub struct ScatterRequest {
     /// Line the props along the walls, backs to the wall, instead of
     /// strewing them anywhere.
     pub along_walls: bool,
+    /// `RRGGBB` or `AARRGGBB` custom color given to every prop.
+    pub color: Option<String>,
 }
 
 /// What a scatter placed.
@@ -64,6 +67,7 @@ impl Workspace {
         request: &ScatterRequest,
     ) -> Result<ScatterReport, AppError> {
         let palette = self.palette(&request.assets)?;
+        let tint = request.color.as_deref().map(parse_color).transpose()?;
         let area = request.area.to_polygon()?;
         let target = self.map_mut(map)?;
         let walls = if request.along_walls {
@@ -85,7 +89,7 @@ impl Workspace {
                 })
                 .find(|prop| fits(target, &area, prop));
             if let Some(prop) = spot {
-                props.push(prop_label(target.add_prop(prop)?));
+                props.push(prop_label(target.add_prop(Prop { tint, ..prop })?));
             }
         }
         let placed = u32::try_from(props.len()).unwrap_or(request.count);
@@ -140,6 +144,7 @@ fn anywhere(piece: &Piece, area: &Polygon, random: &mut Random) -> Prop {
         ),
         rotation: QuarterTurn::from_degrees(turns * 90).unwrap_or(QuarterTurn::Deg0),
         footprint: piece.footprint,
+        tint: None,
     }
 }
 
@@ -170,6 +175,7 @@ fn against_wall(piece: &Piece, walls: &[Segment], random: &mut Random) -> Option
         ),
         rotation,
         footprint: piece.footprint,
+        tint: None,
     })
 }
 
@@ -201,7 +207,7 @@ fn straight_walls(map: &Map) -> Vec<Segment> {
     walls
 }
 
-/// Inside the area and a room, crossing no wall, prop or doorway.
+/// Inside the area and a room or a cave, crossing no wall, prop or doorway.
 fn fits(map: &Map, area: &Polygon, prop: &Prop) -> bool {
     let (low, high) = prop.bounds();
     let corners = [
@@ -211,11 +217,17 @@ fn fits(map: &Map, area: &Polygon, prop: &Prop) -> bool {
         CellPosition::new(low.x, high.y),
     ];
     let in_area = corners.iter().all(|corner| area.contains_position(*corner));
-    let in_room = map.rooms().any(|(_, room)| {
-        room.outline().contains_position(prop.center) && !crosses_walls(room, prop)
-    });
+    let in_room = map
+        .rooms()
+        .any(|(_, room)| room.outline().contains_position(prop.center));
+    let in_cave = corners
+        .iter()
+        .chain([&prop.center])
+        .all(|point| map.cave().is_floor_at(*point));
+    let clear_of_rooms = !map.rooms().any(|(_, room)| crosses_walls(room, prop));
     in_area
-        && in_room
+        && (in_room || in_cave)
+        && clear_of_rooms
         && !map.partitions().any(|(_, wall)| {
             wall.segments()
                 .any(|segment| crosses_box(segment, low, high))
@@ -263,7 +275,9 @@ mod tests {
     use super::ScatterRequest;
     use crate::assets::tests::{CAN, CRATE, DOOR, FLOOR, WALL};
     use crate::workspace::tests::workspace;
-    use crate::{AppError, DoorRequest, RoomRequest, Shape, WallRequest, Workspace};
+    use crate::{
+        AppError, CaveRequest, CaveShape, DoorRequest, RoomRequest, Shape, WallRequest, Workspace,
+    };
 
     fn rectangle(x: i32, y: i32, width: u32, height: u32) -> Shape {
         Shape::Rectangle {
@@ -309,7 +323,24 @@ mod tests {
             count,
             seed,
             along_walls: false,
+            color: None,
         }
+    }
+
+    #[test]
+    fn colors_every_strewn_prop() {
+        let (mut workspace, map) = split_room();
+        let green = ScatterRequest {
+            color: Some("5aff3c".to_owned()),
+            ..strew(6, 2)
+        };
+        workspace.scatter(&map, &green).unwrap();
+        let (_, found) = workspace.map(&map).unwrap();
+        assert!(
+            found
+                .props()
+                .all(|(_, prop)| prop.tint == Some(0xff5a_ff3c))
+        );
     }
 
     /// Room walls x = 1, 13 and y = 1, 9; the split x = 7; the pillar's sides.
@@ -348,6 +379,63 @@ mod tests {
                     "{prop:?} under the top wall"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn strews_cave_floors_too() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        let chamber = CaveRequest {
+            shape: CaveShape::Chamber {
+                x: 15.0,
+                y: 10.0,
+                radius: 5.0,
+            },
+            fill: false,
+            roughness: 0.0,
+            seed: 1,
+        };
+        workspace.carve_cave(&map, &chamber).unwrap();
+        let report = workspace.scatter(&map, &strew(10, 6)).unwrap();
+        assert_eq!(report.props.len(), 10, "{report:?}");
+        let (_, found) = workspace.map(&map).unwrap();
+        for (_, prop) in found.props() {
+            let (low, high) = prop.bounds();
+            for corner in [low, high, prop.center] {
+                assert!(found.cave().is_floor_at(corner), "{prop:?}");
+            }
+        }
+        assert_eq!(workspace.validate(&map), Ok(vec![]));
+    }
+
+    #[test]
+    fn cave_props_keep_off_the_walls_of_rooms_built_inside() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        let hall = CaveRequest {
+            shape: CaveShape::Chamber {
+                x: 15.0,
+                y: 10.0,
+                radius: 7.0,
+            },
+            fill: false,
+            roughness: 0.0,
+            seed: 1,
+        };
+        workspace.carve_cave(&map, &hall).unwrap();
+        let outpost = RoomRequest {
+            shape: rectangle(13, 8, 4, 4),
+            pillars: vec![],
+            floor: FLOOR.to_owned(),
+            wall: WALL.to_owned(),
+        };
+        workspace.add_room(&map, &outpost).unwrap();
+        workspace.scatter(&map, &strew(60, 4)).unwrap();
+        let (_, found) = workspace.map(&map).unwrap();
+        let (_, room) = found.rooms().next().unwrap();
+        for (_, prop) in found.props() {
+            assert!(!crate::validate::crosses_walls(room, prop), "{prop:?}");
         }
     }
 

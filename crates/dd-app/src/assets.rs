@@ -106,6 +106,8 @@ pub(crate) mod tests {
 
     /// A catalog with one asset of each kind the use cases need.
     pub const VOID: &str = "res://textures/terrain/terrain_void.png";
+    pub const BELT: &str =
+        "res://packs/LOREGD01/textures/paths/Artificial/Path_Conveyor_Belt_Large.webp";
     pub const CAN: &str =
         "res://packs/LOREGD01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp";
 
@@ -117,6 +119,7 @@ pub(crate) mod tests {
             (LIGHT, AssetMetrics::default()),
             (GRATE, AssetMetrics::default()),
             (VOID, AssetMetrics::default()),
+            (BELT, AssetMetrics::default()),
             (
                 CAN,
                 AssetMetrics {

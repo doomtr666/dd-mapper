@@ -14,7 +14,7 @@ mod node_id;
 mod wall;
 
 pub use color::Color;
-pub use decoration::{Light, Object, Pattern};
+pub use decoration::{Light, Object, Path, Pattern};
 pub use ground::{Cave, Shapes, Terrain, Tiles};
 pub use header::{Header, PackEntry};
 pub use level::{Environment, Level};

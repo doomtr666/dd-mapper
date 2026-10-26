@@ -1,6 +1,6 @@
 use dd_catalog::AssetKind;
 use dd_domain::{
-    GridError, LightError, MapError, PartitionError, PolygonError, PropError, RoomError,
+    GridError, LightError, MapError, PartitionError, PolygonError, PropError, RoomError, TrackError,
 };
 use thiserror::Error;
 
@@ -43,6 +43,8 @@ pub enum AppError {
     InvalidColor(String),
     #[error("this generator needs a map of at least {width} x {height} cells")]
     MapTooSmall { width: u32, height: u32 },
+    #[error("{0}")]
+    InvalidCaveShape(String),
     #[error("give at least one object asset to scatter")]
     NothingToScatter,
     #[error(transparent)]
@@ -59,6 +61,8 @@ pub enum AppError {
     Map(#[from] MapError),
     #[error(transparent)]
     Prop(#[from] PropError),
+    #[error(transparent)]
+    Track(#[from] TrackError),
     #[error(transparent)]
     Port(#[from] PortError),
 }

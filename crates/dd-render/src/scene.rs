@@ -1,11 +1,11 @@
 //! The layers of the preview, drawn bottom to top.
 
-use dd_domain::{CellPosition, Door, GridSize, Map, Partition};
+use dd_domain::{CaveGrid, CellPosition, Door, GridSize, Map, Partition};
 
 use crate::canvas::{Canvas, LineStyle};
 use crate::font;
 use crate::palette::{
-    DOOR, GRID_ALPHA, LABEL_BACKGROUND, LABEL_TEXT, LIGHT, LIGHT_RANGE_ALPHA, PATTERN_ALPHA,
+    CAVE, DOOR, GRID_ALPHA, LABEL_BACKGROUND, LABEL_TEXT, LIGHT, LIGHT_RANGE_ALPHA, PATTERN_ALPHA,
     PILLAR, PROP_FILL, PROP_OUTLINE, Rgb, VOID, WALL, floor_color, pattern_color,
 };
 use crate::{Preview, PreviewOptions, RenderError};
@@ -38,8 +38,10 @@ const LABEL_DOTS_PER_CELL: f32 = 16.0;
 pub fn render(map: &Map, options: &PreviewOptions) -> Result<Preview, RenderError> {
     let mut canvas = Canvas::new(map.grid(), options.pixels_per_cell)?;
     canvas.fill_background(VOID);
+    draw_cave(&mut canvas, map);
     draw_floor(&mut canvas, map);
     draw_patterns(&mut canvas, map);
+    draw_tracks(&mut canvas, map);
     draw_pillars(&mut canvas, map);
     if options.grid {
         draw_grid(&mut canvas, map.grid());
@@ -77,6 +79,40 @@ fn draw_patterns(canvas: &mut Canvas, map: &Map) {
             pattern_color(&pattern.asset),
             PATTERN_ALPHA,
         );
+    }
+}
+
+/// Cave floor: a quarter-cell square around every dug sample.
+fn draw_cave(canvas: &mut Canvas, map: &Map) {
+    let cave = map.cave();
+    // A little over an eighth of a cell, so that neighbours overlap without seams.
+    let half = 0.15;
+    for row in 0..cave.rows() {
+        for column in (0..cave.columns()).filter(|&column| cave.is_floor(column, row)) {
+            let center = CaveGrid::position(column, row);
+            canvas.fill_box(
+                CellPosition::new(center.x - half, center.y - half),
+                CellPosition::new(center.x + half, center.y + half),
+                CAVE,
+            );
+        }
+    }
+}
+
+/// Paths as translucent bands of their width, colored by texture.
+fn draw_tracks(canvas: &mut Canvas, map: &Map) {
+    for (_, track) in map.tracks() {
+        let mut points = track.points().to_vec();
+        if track.closed() {
+            points.extend(track.points().first());
+        }
+        #[expect(clippy::cast_possible_truncation, reason = "widths are a few cells")]
+        let width_px = (track.width() as f32 * canvas.pixels_per_cell()).max(MIN_WALL_PX);
+        let style = LineStyle {
+            width_px,
+            alpha: PATTERN_ALPHA,
+        };
+        canvas.stroke_through(&points, pattern_color(track.asset()), style);
     }
 }
 
@@ -183,6 +219,15 @@ fn draw_labels(canvas: &mut Canvas, map: &Map) {
             draw_label(canvas, &format!("W{}", id.0), position);
         }
     }
+    for (id, track) in map.tracks() {
+        if let [first, second, ..] = track.points() {
+            let along = CellPosition::new(
+                first.x + (second.x - first.x) * PARTITION_LABEL_ALONG,
+                first.y + (second.y - first.y) * PARTITION_LABEL_ALONG,
+            );
+            draw_label(canvas, &format!("T{}", id.0), along);
+        }
+    }
 }
 
 /// Where a partition's id goes: along its first segment, away from the
@@ -240,7 +285,7 @@ mod tests {
 
     use super::render;
     use crate::palette::{
-        DOOR, LABEL_BACKGROUND, LABEL_TEXT, LIGHT, PILLAR, PROP_FILL, VOID, WALL, floor_color,
+        CAVE, DOOR, LABEL_BACKGROUND, LABEL_TEXT, LIGHT, PILLAR, PROP_FILL, VOID, WALL, floor_color,
     };
     use crate::{Preview, PreviewOptions, RenderError};
 
@@ -279,6 +324,7 @@ mod tests {
             center: CellPosition::new(5.5, 2.5),
             rotation: QuarterTurn::Deg0,
             footprint: Footprint::new(1.0, 1.0).unwrap(),
+            tint: None,
         })
         .unwrap();
         map
@@ -363,6 +409,32 @@ mod tests {
         let position = super::partition_label_position(&partition).unwrap();
         assert!((position.x - 14.0).abs() < 1e-9);
         assert!((position.y - 5.2).abs() < 1e-9, "{position:?}");
+    }
+
+    #[test]
+    fn paints_cave_floors_outside_rooms() {
+        let mut map = reference_map();
+        map.cave_mut().dig(|position| position.x >= 7.5, true);
+        let preview = render(&map, &plain_options()).unwrap();
+        assert_eq!(at(&preview, 8.6, 6.6), CAVE);
+        assert_eq!(at(&preview, 0.4, 6.6), VOID);
+    }
+
+    #[test]
+    fn draws_tracks_as_bands_of_their_width() {
+        let mut map = reference_map();
+        let points = vec![CellPosition::new(1.5, 4.5), CellPosition::new(6.5, 4.5)];
+        let belt = dd_domain::Track::new(asset("belt.webp"), points, 1.0, false).unwrap();
+        let floor = floor_color(&asset("floor.webp"));
+        assert_eq!(
+            at(&render(&map, &plain_options()).unwrap(), 4.5, 4.5),
+            floor
+        );
+        map.add_track(belt).unwrap();
+        let preview = render(&map, &plain_options()).unwrap();
+        assert_ne!(at(&preview, 4.5, 4.5), floor);
+        assert_ne!(at(&preview, 4.5, 4.9), floor);
+        assert_eq!(at(&preview, 4.5, 5.3), floor);
     }
 
     #[test]
@@ -478,6 +550,7 @@ mod tests {
             center: CellPosition::new(2.0, 2.0),
             rotation: QuarterTurn::Deg0,
             footprint: Footprint::new(1.01, 0.63).unwrap(),
+            tint: None,
         })
         .unwrap();
         let preview = render(&map, &PreviewOptions::default()).unwrap();
