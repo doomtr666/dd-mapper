@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "MCP server for designing Dungeondraft maps with an LLM"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [dependencies]

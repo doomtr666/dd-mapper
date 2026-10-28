@@ -80,7 +80,9 @@ materials (worn, clean, grated variants of the same style), never a patchwork.
 8. Furnish with prop_place: the piece that tells the room's purpose first \
 (a machine, a forge, bunks, an altar), then line the walls with \
 prop_scatter along_walls=true (lockers, shelves, barrels, pipes, crates). \
-Footprints are real sizes in cells; keep doorways free. Seats and consoles of \
+Footprints are real sizes in cells; keep doorways free. Assets tagged \
+Colorable come out raw red: give each one a color (color=), wood brown for furniture, \
+muted tones for cloth. Seats and consoles of \
 the LORE packs face down (south) at 0 degrees, west at 90, north at 180 and \
 east at 270; to turn a prop, prop_remove it and place it again.
 9. Light: dim the ambient light with map_ambient (404858 for a dim interior, \

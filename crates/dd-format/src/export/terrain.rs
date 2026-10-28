@@ -36,13 +36,7 @@ pub fn unpack_splat(splat: &PoolByteArray, ground: &Ground) -> Option<Vec<[u8; T
     if splat.0.len() != samples * TERRAIN_SLOTS {
         return None;
     }
-    Some(
-        splat
-            .0
-            .chunks_exact(TERRAIN_SLOTS)
-            .map(|weights| [weights[0], weights[1], weights[2], weights[3]])
-            .collect(),
-    )
+    Some(splat.0.as_chunks::<TERRAIN_SLOTS>().0.to_vec())
 }
 
 /// The texture of each slot, empty names left out.

@@ -166,7 +166,7 @@ mod tests {
             corners,
             [(0, 0), (0, 4), (6, 0), (6, 4)].map(|(x, y)| CellPoint::new(x, y))
         );
-        assert!(merged.pillars().is_empty());
+        assert_eq!(merged.pillars(), &[] as &[Polygon]);
     }
 
     #[test]
@@ -190,7 +190,7 @@ mod tests {
         hall.add_pillar(rectangle(4, 4, 1, 1)).unwrap();
         let merged = merge(&[&hall, &square_room(3, 3, 3)]).unwrap();
         assert_eq!(merged.outline().double_area(), 2 * 10 * 10);
-        assert!(merged.pillars().is_empty());
+        assert_eq!(merged.pillars(), &[] as &[Polygon]);
     }
 
     #[test]

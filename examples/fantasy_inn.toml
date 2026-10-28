@@ -1,0 +1,681 @@
+# THE CROOKED LANTERN — a village inn at night, Dungeondraft's own assets only.
+# dd-mapper generate examples/fantasy_inn.toml --out fantasy_inn.dungeondraft_map --packs assets/packs
+#
+# The inn stands x 4 to 24, y 4 to 18; the road runs south of it, the stable
+# yard east.
+#   Common room (south-west, 13 x 10): the hearth, the bar, four round tables.
+#   The snug (north-west): a quiet table for those who pay for quiet.
+#   Stair landing (north middle): the way up to the rooms.
+#   Kitchen (north-east): oven, stove and a back door to the yard.
+#   Storeroom (south-east): kegs, sacks and the cellar trapdoor.
+
+[style]
+floor = "res://textures/tilesets/simple/tileset_wood_interlaced.png"
+wall = "res://textures/walls/wood_02.png"
+door = "res://textures/portals/door_01.png"
+background = "res://textures/terrain/terrain_grass.png"
+ambient = "3e4252"
+
+[map]
+width = 36
+height = 26
+
+# --- Structure ------------------------------------------------------------------------
+
+[[room]]   # R0: the inn
+shape = { type = "rectangle", x = 4, y = 4, width = 20, height = 14 }
+
+[[wall]]   # W0: common room | snug and landing
+points = [[4, 8], [17, 8]]
+
+[[wall]]   # W1: west half | kitchen and storeroom
+points = [[17, 4], [17, 18]]
+
+[[wall]]   # W2: kitchen | storeroom
+points = [[17, 11], [24, 11]]
+
+[[wall]]   # W3: snug | landing
+points = [[11, 4], [11, 8]]
+
+[[door]]   # D0: the front door, onto the road
+on = "R0"
+at = [11.5, 18]
+
+[[door]]   # D1: the kitchen's back door, onto the yard
+on = "R0"
+at = [24, 9.5]
+
+[[door]]   # D2: common room -> snug
+on = "W0"
+at = [5.5, 8]
+
+[[door]]   # D3: common room -> landing
+on = "W0"
+at = [14.5, 8]
+
+[[door]]   # D4: common room -> kitchen, behind the bar
+on = "W1"
+at = [17, 9.5]
+
+[[door]]   # D5: kitchen -> storeroom
+on = "W2"
+at = [20.5, 11]
+
+[[door]]   # D6, D7: windows on the road
+on = "R0"
+at = [6.5, 18]
+asset = "res://textures/portals/window_01.png"
+
+[[door]]
+on = "R0"
+at = [15.5, 18]
+asset = "res://textures/portals/window_01.png"
+
+[[door]]   # D8, D9: windows on the west lane
+on = "R0"
+at = [4, 12.5]
+asset = "res://textures/portals/window_01.png"
+
+[[door]]
+on = "R0"
+at = [4, 15.5]
+asset = "res://textures/portals/window_01.png"
+
+[[door]]   # D10: the snug's window
+on = "R0"
+at = [7.5, 4]
+asset = "res://textures/portals/window_01.png"
+
+[[floor]]   # kitchen: flagstones
+shape = { type = "rectangle", x = 17, y = 4, width = 7, height = 7 }
+tileset = "res://textures/tilesets/simple/tileset_cut_stone.png"
+
+[[floor]]   # storeroom: worn boards
+shape = { type = "rectangle", x = 17, y = 11, width = 7, height = 7 }
+tileset = "res://textures/tilesets/simple/tileset_wood_damaged.png"
+
+# --- Outside: the road, the yard ---------------------------------------------------------
+
+[[terrain]]   # the road, worn to dirt
+asset = "res://textures/terrain/terrain_dirt.png"
+shape = { type = "tunnel", points = [[-1, 21.5], [12, 21], [24, 21.5], [37, 22]], width = 3.5 }
+falloff = 1.5
+roughness = 0.4
+seed = 1
+
+[[terrain]]   # the path to the front door
+asset = "res://textures/terrain/terrain_dirt.png"
+shape = { type = "tunnel", points = [[11.5, 18], [11.5, 21]], width = 2 }
+falloff = 1
+roughness = 0.3
+seed = 2
+
+[[terrain]]   # the yard, its grass worn dry
+asset = "res://textures/terrain/terrain_dry_grass.png"
+shape = { type = "chamber", x = 29, y = 11, radius = 4 }
+falloff = 2
+roughness = 0.4
+seed = 3
+
+[[terrain]]   # dry grass along the walls
+asset = "res://textures/terrain/terrain_dry_grass.png"
+shape = { type = "chamber", x = 2, y = 6, radius = 3 }
+falloff = 2
+roughness = 0.6
+seed = 4
+
+[[path]]   # cart ruts down the road
+asset = "res://textures/paths/wagon_trail.png"
+points = [[-1, 21.6], [12, 21.1], [24, 21.6], [37, 22.1]]
+width = 2
+
+[[path]]   # the yard's fence
+asset = "res://textures/paths/wood_fence_01.png"
+points = [[24, 4.5], [33.5, 4.5], [33.5, 17.5], [27, 17.5]]
+width = 0.5
+sharp = true
+
+# --- Common room ------------------------------------------------------------------------
+
+[[prop]]   # the hearth
+asset = "res://textures/objects/structures/fireplace_01.png"
+at = [9, 8.65]
+
+[[prop]]
+asset = "res://textures/objects/decor/floor/bear_rug.png"
+at = [9, 10.4]
+
+[[prop]]   # the bar, the barman's side towards the kitchen
+asset = "res://textures/objects/furniture/tables/bar_table.png"
+at = [15.2, 13.6]
+rotation = 90
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/bar_chair.png"
+at = [13.8, 12]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/bar_chair.png"
+at = [13.8, 13.2]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/bar_chair.png"
+at = [13.8, 14.4]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/bar_chair.png"
+at = [13.8, 15.6]
+
+[[prop]]   # kegs behind the bar
+asset = "res://textures/objects/supplies/barrels/barrel_01.png"
+at = [16.5, 12.4]
+
+[[prop]]
+asset = "res://textures/objects/supplies/barrels/barrel_02.png"
+at = [16.5, 13.3]
+
+[[prop]]
+asset = "res://textures/objects/supplies/barrels/barrel_01.png"
+at = [16.5, 14.2]
+
+[[prop]]
+asset = "res://textures/objects/furniture/storage/merchant_shelf_05.png"
+at = [16.7, 16.3]
+rotation = 90
+
+[[prop]]   # tankards and a pitcher on the bar
+asset = "res://textures/objects/activities/dining/cup.png"
+at = [15.1, 12.3]
+
+[[prop]]
+asset = "res://textures/objects/activities/dining/pitcher.png"
+color = "a07a5a"
+at = [15.2, 13.9]
+
+[[prop]]
+asset = "res://textures/objects/activities/dining/cup.png"
+at = [15.0, 15.1]
+
+[[prop]]   # table 1, by the fire
+asset = "res://textures/objects/furniture/tables/round_table_01.png"
+at = [6.5, 11.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_01.png"
+at = [5.5, 11.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_01.png"
+at = [7.5, 11.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_02.png"
+at = [6.5, 12.5]
+
+[[prop]]
+asset = "res://textures/objects/clutter/games/cards_03.png"
+at = [6.5, 11.5]
+
+[[prop]]   # table 2
+asset = "res://textures/objects/furniture/tables/round_table_02.png"
+at = [11, 12.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_01.png"
+at = [10, 12.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_02.png"
+at = [12, 12.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_01.png"
+at = [11, 11.5]
+
+[[prop]]
+asset = "res://textures/objects/activities/dining/plate.png"
+at = [10.8, 12.4]
+
+[[prop]]
+asset = "res://textures/objects/activities/dining/cup.png"
+at = [11.3, 12.7]
+
+[[prop]]   # table 3
+asset = "res://textures/objects/furniture/tables/round_table_03.png"
+color = "7a5636"
+at = [6.5, 15.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_02.png"
+at = [5.5, 15.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_01.png"
+at = [7.5, 15.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_01.png"
+at = [6.5, 14.5]
+
+[[prop]]
+asset = "res://textures/objects/activities/dining/food_meat_leg_03.png"
+at = [6.5, 15.5]
+
+[[prop]]   # table 4, near the door
+asset = "res://textures/objects/furniture/tables/round_table_04.png"
+color = "7a5636"
+at = [10.5, 16]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_01.png"
+at = [9.5, 16]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/round_chair_02.png"
+at = [10.5, 15]
+
+[[prop]]
+asset = "res://textures/objects/activities/dining/cup.png"
+at = [10.3, 15.8]
+
+[[prop]]
+asset = "res://textures/objects/activities/dining/bottle.png"
+color = "4a7a4a"
+at = [10.7, 16.2]
+
+[[prop]]   # trophies over the hearth wall
+asset = "res://textures/objects/decor/wall/deer_head.png"
+at = [12.5, 8.3]
+
+[[prop]]
+asset = "res://textures/objects/decor/wall/trophy_boar_head.png"
+at = [4.35, 9.8]
+rotation = 270
+
+[[scatter]]   # spilt ale, crumbs and a broken mug
+assets = [
+    "res://textures/objects/clutter/floor/broken_pottery_11.png",
+    "res://textures/objects/clutter/floor/floor_cloth_03.png",
+    "res://textures/objects/clutter/floor/broken_pottery_06.png",
+]
+shape = { type = "rectangle", x = 4, y = 8, width = 9, height = 10 }
+count = 5
+seed = 11
+
+[[prop]]   # candles on the tables
+asset = "res://textures/objects/decor/lighting/bowl_lamp_01.png"
+at = [6.75, 11.3]
+
+[[prop]]
+asset = "res://textures/objects/decor/lighting/bowl_lamp_01.png"
+at = [11.25, 12.7]
+
+[[prop]]
+asset = "res://textures/objects/decor/lighting/bowl_lamp_02.png"
+at = [6.2, 15.3]
+
+[[prop]]
+asset = "res://textures/objects/decor/lighting/bowl_lamp_02.png"
+at = [10.75, 16.25]
+
+# --- The snug -------------------------------------------------------------------------
+
+[[prop]]
+asset = "res://textures/objects/decor/floor/carpet_03.png"
+color = "4a5a7a"
+at = [7.5, 6]
+
+[[prop]]
+asset = "res://textures/objects/furniture/tables/small_table_01.png"
+at = [7.5, 6]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/arm_chair_01.png"
+color = "6b4a2e"
+at = [6.2, 6]
+rotation = 90
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/arm_chair_01.png"
+color = "6b4a2e"
+at = [8.8, 6]
+rotation = 270
+
+[[prop]]
+asset = "res://textures/objects/clutter/games/chess_01.png"
+at = [7.5, 6]
+
+[[prop]]
+asset = "res://textures/objects/furniture/storage/bookshelf_corner_01.png"
+at = [4.5, 4.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/storage/chest_01.png"
+color = "7a5636"
+at = [10.4, 4.5]
+
+[[prop]]
+asset = "res://textures/objects/decor/lighting/lantern_02.png"
+at = [7.9, 5.8]
+
+# --- Stair landing ----------------------------------------------------------------------
+
+[[prop]]   # stairs up to the rooms
+asset = "res://textures/objects/structures/stairs/stairs_up_01.png"
+at = [16.4, 5.5]
+
+[[prop]]
+asset = "res://textures/objects/furniture/storage/wardrobe_02.png"
+at = [12.6, 4.3]
+
+[[prop]]
+asset = "res://textures/objects/supplies/sacks/sack_15.png"
+color = "b09a70"
+at = [11.7, 7.2]
+
+[[prop]]
+asset = "res://textures/objects/furniture/chairs/bench_01.png"
+at = [13.5, 7.6]
+
+# --- Kitchen -----------------------------------------------------------------------------
+
+[[prop]]
+asset = "res://textures/objects/activities/cooking/oven_02.png"
+at = [22.9, 4.9]
+
+[[prop]]
+asset = "res://textures/objects/activities/cooking/stove_01.png"
+at = [19.6, 4.4]
+
+[[prop]]
+asset = "res://textures/objects/activities/cooking/spit_roast_01.png"
+at = [17.5, 6]
+
+[[prop]]   # the work table
+asset = "res://textures/objects/furniture/tables/small_table_07.png"
+at = [20.5, 7.6]
+
+[[prop]]
+asset = "res://textures/objects/activities/cooking/pig_roast.png"
+at = [20.5, 7.2]
+
+[[prop]]
+asset = "res://textures/objects/activities/cooking/cutting_boards.png"
+at = [20.4, 8.1]
+
+[[prop]]
+asset = "res://textures/objects/activities/cooking/food_leek_05.png"
+at = [20.7, 8.2]
+
+[[scatter]]   # crates of produce along the walls
+assets = [
+    "res://textures/objects/supplies/crates/fruit_box_01.png",
+    "res://textures/objects/supplies/crates/crate_03.png",
+    "res://textures/objects/supplies/sacks/sack_05.png",
+    "res://textures/objects/supplies/barrels/barrel_04.png",
+    "res://textures/objects/activities/cooking/potatoes.png",
+]
+shape = { type = "rectangle", x = 17, y = 6, width = 7, height = 5 }
+count = 5
+seed = 12
+along_walls = true
+
+# --- Storeroom ----------------------------------------------------------------------------
+
+[[prop]]
+asset = "res://textures/objects/supplies/barrels/giant_barrel_02.png"
+at = [22.9, 13.5]
+
+[[prop]]
+asset = "res://textures/objects/supplies/barrels/giant_barrel_01.png"
+at = [22.9, 16.5]
+
+[[prop]]   # the cellar trapdoor
+asset = "res://textures/objects/structures/stairs/stairs_down_01.png"
+at = [18, 17]
+
+[[scatter]]
+assets = [
+    "res://textures/objects/supplies/crates/crate_01.png",
+    "res://textures/objects/supplies/crates/crate_04.png",
+    "res://textures/objects/supplies/sacks/grain-sack_01.png",
+    "res://textures/objects/supplies/sacks/sack_05.png",
+    "res://textures/objects/supplies/barrels/barrel_03.png",
+]
+shape = { type = "rectangle", x = 17, y = 11, width = 5, height = 7 }
+count = 8
+seed = 13
+along_walls = true
+
+[[scatter]]   # cobwebs in the corners
+assets = [
+    "res://textures/objects/clutter/cobwebs/spiderweb_04.png",
+    "res://textures/objects/clutter/cobwebs/spiderweb_07.png",
+]
+shape = { type = "rectangle", x = 17, y = 11, width = 7, height = 7 }
+count = 3
+seed = 14
+along_walls = true
+
+# --- The yard and the road -------------------------------------------------------------
+
+[[prop]]
+asset = "res://textures/objects/vehicles/cart_01.png"
+color = "8a6a42"
+at = [30.5, 12]
+rotation = 15
+
+[[prop]]
+asset = "res://textures/objects/stable/hay.png"
+at = [32.5, 6]
+
+[[prop]]
+asset = "res://textures/objects/stable/hay.png"
+at = [31.5, 6.3]
+rotation = 40
+
+[[prop]]
+asset = "res://textures/objects/stable/hay_floor_01.png"
+at = [29.5, 7.5]
+
+[[prop]]
+asset = "res://textures/objects/elven_set/elven_well.png"
+at = [27, 15]
+
+[[prop]]
+asset = "res://textures/objects/supplies/barrels/barrel_02.png"
+at = [24.8, 12.5]
+
+[[prop]]
+asset = "res://textures/objects/supplies/crates/crate_02.png"
+at = [24.9, 13.4]
+
+[[prop]]   # trees around the inn
+asset = "res://textures/objects/vegetation/trees/autumn_tree_02.png"
+at = [1.5, 2]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/cherry_tree_03.png"
+at = [2, 24.5]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/autumn_tree_04.png"
+at = [34.5, 24.5]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/autumn_tree_03.png"
+at = [19, 1.2]
+
+[[scatter]]   # bushes and flowers along the front
+assets = [
+    "res://textures/objects/vegetation/shrubs/bush_green_simple_02.png",
+    "res://textures/objects/vegetation/shrubs/bush_green_simple_06.png",
+]
+shape = { type = "rectangle", x = 0, y = 18, width = 24, height = 1 }
+count = 5
+seed = 15
+outdoors = true
+
+[[scatter]]   # flowers by the door, yellow
+assets = [
+    "res://textures/objects/vegetation/shrubs/bush_flower_01.png",
+    "res://textures/objects/vegetation/shrubs/bush_flower_04.png",
+]
+shape = { type = "rectangle", x = 0, y = 18, width = 24, height = 1 }
+count = 6
+seed = 17
+outdoors = true
+color = "e8c050"
+
+[[scatter]]
+assets = [
+    "res://textures/objects/vegetation/shrubs/bush_green_simple_04.png",
+    "res://textures/objects/vegetation/shrubs/bush_green_simple_09.png",
+]
+shape = { type = "rectangle", x = 0, y = 4, width = 3, height = 14 }
+count = 4
+seed = 16
+outdoors = true
+
+[[scatter]]   # and lavender along the west lane
+assets = ["res://textures/objects/vegetation/shrubs/bush_flower_02.png"]
+shape = { type = "rectangle", x = 0, y = 4, width = 3, height = 14 }
+count = 4
+seed = 18
+outdoors = true
+color = "a888d0"
+
+# --- Light ---------------------------------------------------------------------------------
+
+[[light]]   # the hearth, and its bright heart
+asset = "res://textures/lights/soft.png"
+at = [9, 9.5]
+range = 5
+intensity = 1.2
+color = "ff8a3a"
+
+[[light]]
+asset = "res://textures/lights/soft.png"
+at = [9, 9.1]
+range = 2
+intensity = 1.0
+color = "ffb860"
+
+[[light]]   # a candle on each table
+asset = "res://textures/lights/soft.png"
+at = [6.5, 11.5]
+range = 2.2
+intensity = 0.8
+color = "ffb860"
+
+[[light]]
+asset = "res://textures/lights/soft.png"
+at = [11, 12.5]
+range = 2.2
+intensity = 0.8
+color = "ffb860"
+
+[[light]]
+asset = "res://textures/lights/soft.png"
+at = [6.5, 15.5]
+range = 2.2
+intensity = 0.8
+color = "ffb860"
+
+[[light]]
+asset = "res://textures/lights/soft.png"
+at = [10.5, 16]
+range = 2.2
+intensity = 0.8
+color = "ffb860"
+
+[[light]]   # lamps on the bar
+asset = "res://textures/lights/soft.png"
+at = [15.2, 12.3]
+range = 2.6
+intensity = 0.8
+color = "ffc070"
+
+[[light]]
+asset = "res://textures/lights/soft.png"
+at = [15.2, 15.2]
+range = 2.6
+intensity = 0.8
+color = "ffc070"
+
+[[light]]   # the snug's lantern
+asset = "res://textures/lights/soft.png"
+at = [7.9, 5.8]
+range = 3
+intensity = 0.9
+color = "ffb860"
+
+[[light]]   # the landing
+asset = "res://textures/lights/soft.png"
+at = [14, 6]
+range = 2.5
+intensity = 0.6
+color = "ffc070"
+
+[[light]]   # the oven and the stove
+asset = "res://textures/lights/soft.png"
+at = [22.9, 5.6]
+range = 4
+intensity = 1.2
+color = "ff7a30"
+
+[[light]]
+asset = "res://textures/lights/soft.png"
+at = [19.6, 4.9]
+range = 2.5
+intensity = 0.9
+color = "ff8a3a"
+
+[[light]]   # a candle in the storeroom
+asset = "res://textures/lights/soft.png"
+at = [19.5, 14.5]
+range = 2.5
+intensity = 0.6
+color = "ffc070"
+
+[[light]]   # the lantern over the front door
+asset = "res://textures/lights/soft.png"
+at = [11.5, 18.8]
+range = 3.5
+intensity = 1.0
+color = "ffc070"
+
+[[light]]   # firelight spilling from the windows
+asset = "res://textures/lights/soft.png"
+at = [6.5, 18.8]
+range = 2
+intensity = 0.5
+color = "ffc070"
+
+[[light]]
+asset = "res://textures/lights/soft.png"
+at = [15.5, 18.8]
+range = 2
+intensity = 0.5
+color = "ffc070"
+
+[[light]]
+asset = "res://textures/lights/soft.png"
+at = [3.2, 12.5]
+range = 2
+intensity = 0.5
+color = "ffc070"
+
+[[light]]
+asset = "res://textures/lights/soft.png"
+at = [3.2, 15.5]
+range = 2
+intensity = 0.5
+color = "ffc070"
+
+[[light]]   # moonlight on the yard
+asset = "res://textures/lights/soft.png"
+at = [29, 11]
+range = 8
+intensity = 0.5
+color = "8aa4ff"

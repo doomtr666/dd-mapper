@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Seeded layout generators: partitioned buildings, hab blocks, ship decks"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [dependencies]

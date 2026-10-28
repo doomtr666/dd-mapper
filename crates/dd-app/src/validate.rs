@@ -1,18 +1,35 @@
 //! Design checks: what is legal but probably a mistake.
 
-use dd_domain::{CellPosition, Map, Prop, Room, Segment, WallRef};
+use dd_domain::{AssetPath, CellPosition, Map, Prop, Room, Segment, WallRef};
 
+use crate::describe::asset_name;
 use crate::ids::{prop_label, room_label};
 
 /// Warnings about `map`, empty when nothing looks wrong.
 pub fn validate(map: &Map) -> Vec<String> {
-    if map.rooms().next().is_none() && map.cave().floor_samples() == 0 {
+    let has_ground = map.background().is_some() || map.cave().floor_samples() > 0;
+    if map.rooms().next().is_none() && !has_ground {
         return vec!["the map has no room nor cave".to_owned()];
     }
     let mut warnings = rooms_without_doors(map);
     warnings.extend(misplaced_props(map));
     warnings.extend(overlapping_props(map));
     warnings
+}
+
+/// Props of an asset Dungeondraft lets color, left without a color: it
+/// draws their mask in raw red.
+pub fn uncolored_props(map: &Map, is_colorable: impl Fn(&AssetPath) -> bool) -> Vec<String> {
+    map.props()
+        .filter(|(_, prop)| prop.tint.is_none() && is_colorable(&prop.asset))
+        .map(|(id, prop)| {
+            format!(
+                "prop {} ({}) is colorable but has no color: Dungeondraft draws it red",
+                prop_label(id),
+                asset_name(&prop.asset)
+            )
+        })
+        .collect()
 }
 
 fn rooms_without_doors(map: &Map) -> Vec<String> {
@@ -191,6 +208,15 @@ mod tests {
     fn warns_about_an_empty_map() {
         let map = Map::new(GridSize::new(5, 5).unwrap());
         assert_eq!(validate(&map), ["the map has no room nor cave"]);
+    }
+
+    #[test]
+    fn an_outdoor_map_needs_only_its_ground() {
+        let mut map = Map::new(GridSize::new(5, 5).unwrap());
+        map.set_background(asset("grass.png"));
+        add_prop(&mut map, 2.5, 2.5);
+        add_prop(&mut map, 2.8, 2.5);
+        assert_eq!(validate(&map), ["props P0 and P1 overlap"]);
     }
 
     #[test]

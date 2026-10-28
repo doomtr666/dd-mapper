@@ -1,9 +1,9 @@
 # dd-mapper
 
 Designs [Dungeondraft](https://dungeondraft.net/) 1.2 maps on a grid of cells and writes
-`.dungeondraft_map` files that Dungeondraft opens as if they were its own. It was built to
-draw Warhammer 40,000 (Imperium Maledictum) locations with the LORE asset packs. It can be
-driven in two ways:
+`.dungeondraft_map` files that Dungeondraft opens as if they were its own. It works with
+Dungeondraft's own assets and with any asset pack whose author allows third-party tools to
+read it, in any setting. It can be driven in two ways:
 
 - **`dd-mcp`**, an [MCP](https://modelcontextprotocol.io/) server: an LLM such as Claude
   plans the map, adds rooms, partitions, doors, props, lights and patterns, and looks at
@@ -13,6 +13,78 @@ driven in two ways:
 
 One cell is 5 feet (256 pixels in Dungeondraft). Positions are in cells, and corners sit
 on grid vertices: `(0, 0)` is the top-left corner of the map.
+
+## Examples
+
+The plans in [`examples/`](examples) build complete maps with Dungeondraft's own assets
+only. Each one is a TOML file of a few hundred lines: rooms, walls, doors, painted ground,
+props, scattered clutter and lights, all positioned in cells. Each map below was built by
+one command, then opened in Dungeondraft and exported.
+
+```sh
+dd-mapper generate examples/fantasy_inn.toml --out fantasy_inn.dungeondraft_map \
+  --preview fantasy_inn.png --packs assets/packs
+```
+
+`--packs` points at the folder holding `Dungeondraft.pck` (see
+[Asset sources](#asset-sources)); `--preview` also writes the schematic view.
+
+### The Crooked Lantern: a village inn at night
+
+![The Crooked Lantern, rendered by Dungeondraft](images/fantasy_inn.jpg)
+
+[`examples/fantasy_inn.toml`](examples/fantasy_inn.toml), 36 × 26 cells. A timber inn
+split by partitions into five rooms, each with its own floor and purpose:
+
+- **The common room**: the hearth with a bear-skin rug, a bar with stools and kegs
+  behind it, four round tables with candles, cards, plates and a joint of meat.
+- **The snug**: a quiet table with a chess board between two armchairs.
+- **The stair landing**, **the kitchen** (flagstones, oven, stove, a pig on the spit, crates
+  of produce along the walls) and **the storeroom** (worn boards, great casks, the cellar
+  trapdoor, cobwebs in the corners).
+- **Outside**: the road worn to dirt with cart ruts, the path to the door, flowers and
+  bushes along the walls, the fenced stable yard with its cart, hay and well.
+
+It shows how light sets a mood: a dark night ambient, and one small warm light for each
+fire: the hearth, a candle on every table, the lamps on the bar, the oven, the lantern
+over the door, firelight spilling out of the windows, and pale moonlight on the yard.
+Colorable assets (armchairs, tables, carpet, cart, flowers) are each given a color.
+
+### Ambush on the old toll road: a forest encounter
+
+![Ambush on the old toll road, rendered by Dungeondraft](images/forest_ambush.jpg)
+
+[`examples/forest_ambush.toml`](examples/forest_ambush.toml), 36 × 26 cells, all outdoors:
+a background terrain and painted ground, no rooms.
+
+- **On the road**: a felled pine blocks the way; the merchant's wagon lies smashed just
+  before it, the ox dead in the traces, the cargo strewn and arrows everywhere.
+- **The bandits' cover**: boulders, thorns and roots along the ridge north of the road.
+- **Their camp** (north-west), in a trampled clearing: two tents, the fire with a spit,
+  bedrolls, the loot and a prisoner in a cage.
+- **The standing stones** (south-east), reached by a footpath: a ring of stones on bare
+  rock around glowing mushrooms.
+- **The wood**: pines and an autumn tree placed by hand, ferns, leaves and grass scattered,
+  moss painted under the trees, fading into the grass.
+
+### The schematic views
+
+| The inn | The ambush |
+|---|---|
+| ![Schematic view of the inn](images/fantasy_inn_preview.png) | ![Schematic view of the ambush](images/forest_ambush_preview.png) |
+
+`dd-mapper` and the MCP server draw these themselves, without the asset images: they are
+how an LLM sees the map while it builds it, and how you check a plan before opening
+Dungeondraft. Each element carries the id that the tools and plans use:
+
+- **R** rooms, their floor tinted by tileset, and **W** free-standing walls, drawn in black;
+- **D** doors and windows, in orange on the walls;
+- **P** props, as blue boxes at their real footprint;
+- **L** lights, a yellow dot with a circle for their range;
+- **T** paths (roads, ruts, fences), as bands.
+
+Floor patterns show as tints without a label; painted ground is not drawn. Open the map
+in Dungeondraft to see them.
 
 ## Build
 
@@ -309,3 +381,9 @@ tests are ignored by default:
 - `real_packs` needs the packs in `assets/packs`. Run it with
   `cargo test -p dd-catalog-io -- --ignored`.
 - `print_warnings` prints what importing the fixtures leaves out.
+
+## License
+
+dd-mapper is released under the [MIT license](LICENSE). It covers the tool only: asset
+packs keep their own terms, and the maps you draw with them follow those terms. Dungeondraft
+is a product of its own authors; dd-mapper is not affiliated with it.

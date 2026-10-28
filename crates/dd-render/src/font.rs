@@ -85,6 +85,6 @@ mod tests {
 
     #[test]
     fn unknown_characters_are_blank() {
-        assert!(lit_dots("?").is_empty());
+        assert_eq!(lit_dots("?"), Vec::new());
     }
 }

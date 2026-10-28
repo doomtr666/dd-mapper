@@ -236,6 +236,35 @@ impl Map {
             .map(|(_, room)| room)
     }
 
+    /// Whether the segment from `start` to `end` touches the map, clipped
+    /// against its borders (Liang-Barsky).
+    fn segment_crosses_grid(&self, start: CellPosition, end: CellPosition) -> bool {
+        let (dx, dy) = (end.x - start.x, end.y - start.y);
+        let (width, height) = (f64::from(self.grid.width()), f64::from(self.grid.height()));
+        let limits = [
+            (-dx, start.x),
+            (dx, width - start.x),
+            (-dy, start.y),
+            (dy, height - start.y),
+        ];
+        let (mut enter, mut leave) = (0.0_f64, 1.0_f64);
+        for (direction, room_left) in limits {
+            if direction == 0.0 {
+                if room_left < 0.0 {
+                    return false;
+                }
+                continue;
+            }
+            let crossing = room_left / direction;
+            if direction < 0.0 {
+                enter = enter.max(crossing);
+            } else {
+                leave = leave.min(crossing);
+            }
+        }
+        enter <= leave
+    }
+
     fn first_outside_grid(&self, points: &[CellPoint]) -> Option<CellPoint> {
         points
             .iter()
@@ -527,13 +556,13 @@ impl Map {
     /// Adds a track; like in Dungeondraft, it may run off the edges of the map.
     ///
     /// # Errors
-    /// Fails when no point of the track lies on the map.
+    /// Fails when no part of the track crosses the map.
     pub fn add_track(&mut self, track: Track) -> Result<TrackId, MapError> {
-        if !track
+        let on_map = track
             .points()
-            .iter()
-            .any(|point| self.grid.contains_position(*point))
-        {
+            .windows(2)
+            .any(|pair| self.segment_crosses_grid(pair[0], pair[1]));
+        if !on_map {
             return Err(MapError::TrackOutsideGrid);
         }
         let id = TrackId(allocate(&mut self.next_track_id));
@@ -700,7 +729,7 @@ mod tests {
             Some(CellPosition::new(3.0, 4.0))
         );
         let added = map.add_room(room(4, 0, 4, 4), &floor()).unwrap();
-        assert!(added.removed_doors.is_empty());
+        assert_eq!(added.removed_doors, Vec::new());
         assert_eq!(
             map.door_position(entrance),
             Some(CellPosition::new(3.0, 4.0))
@@ -869,7 +898,12 @@ mod tests {
             map.add_track(belt(&[(1.0, 2.0), (40.0, 2.0)])),
             Ok(TrackId(1))
         );
-        assert_eq!(map.tracks().count(), 2);
+        assert_eq!(
+            map.add_track(belt(&[(-1.0, 3.0), (41.0, 3.0)])),
+            Ok(TrackId(2)),
+            "a track crossing the whole map"
+        );
+        assert_eq!(map.tracks().count(), 3);
         assert_eq!(
             map.add_track(belt(&[(40.0, 1.0), (50.0, 1.0)])),
             Err(MapError::TrackOutsideGrid)
@@ -992,7 +1026,7 @@ mod tests {
         let wall = map.add_partition(partition(&[(6, 0), (6, 8)])).unwrap();
         let door = map.add_door(door_in_partition(wall, 0, 0.5)).unwrap();
         let added = map.add_room(room(12, 0, 4, 4), &floor()).unwrap();
-        assert!(added.removed_doors.is_empty());
+        assert_eq!(added.removed_doors, Vec::new());
         assert_eq!(map.door_position(door), Some(CellPosition::new(6.0, 4.0)));
     }
 

@@ -19,7 +19,10 @@ use crate::ids::{
     WallOwner, door_label, light_label, map_label, parse_map, parse_prop, parse_wall_owner,
     partition_label, pattern_label, prop_label, room_label, track_label,
 };
-use crate::validate::validate;
+use crate::validate::{uncolored_props, validate};
+
+/// The tag Dungeondraft gives the assets it lets color.
+const COLORABLE_TAG: &str = "Colorable";
 use crate::{
     AppError, DoorRequest, FloorRequest, LightRequest, MapFiles, PathRequest, PatternRequest,
     PreviewRenderer, PropRequest, RoomRequest, SaveFacts, WallRequest,
@@ -336,7 +339,17 @@ impl Workspace {
     /// # Errors
     /// Fails on an unknown map.
     pub fn validate(&self, map: &str) -> Result<Vec<String>, AppError> {
-        Ok(validate(self.map(map)?.1))
+        let found = self.map(map)?.1;
+        let mut warnings = validate(found);
+        warnings.extend(uncolored_props(found, |asset| {
+            self.catalog.get(asset.as_str()).is_some_and(|known| {
+                known
+                    .tags
+                    .iter()
+                    .any(|tag| tag.eq_ignore_ascii_case(COLORABLE_TAG))
+            })
+        }));
+        Ok(warnings)
     }
 
     /// # Errors
@@ -493,7 +506,7 @@ pub(crate) mod tests {
 
     use super::{RoomReport, Workspace};
     use crate::assets::tests::{
-        BELT, CRATE, DOOR, FLOOR, GRATE, LIGHT, ROLLER, VOID, WALL, small_catalog,
+        ARMCHAIR, BELT, CRATE, DOOR, FLOOR, GRATE, LIGHT, ROLLER, VOID, WALL, small_catalog,
     };
     use crate::{
         AppError, DoorRequest, FloorRequest, FootprintOf, LightRequest, MapFiles, OpenedMap,
@@ -625,9 +638,9 @@ pub(crate) mod tests {
         let (workspace, _) = workspace();
         assert_eq!(
             workspace.catalog_summary(),
-            "10 assets.\n\
-             By pack: LOREAP01 (1), LOREGD01 (8), default (1).\n\
-             By kind: tilesets (1), walls (1), portals (2), objects (2), lights (1), patterns (1), \
+            "11 assets.\n\
+             By pack: LOREAP01 (1), LOREGD01 (8), default (2).\n\
+             By kind: tilesets (1), walls (1), portals (2), objects (3), lights (1), patterns (1), \
              terrain (1), paths (1).\n"
         );
     }
@@ -1054,6 +1067,41 @@ pub(crate) mod tests {
             workspace.add_pattern(&map, &floor_as_pattern),
             Err(AppError::WrongAssetKind { .. })
         ));
+    }
+
+    #[test]
+    fn validation_flags_colorable_props_left_without_a_color() {
+        let (mut workspace, _) = workspace();
+        let map = workspace.new_map(30, 20).unwrap();
+        workspace
+            .add_room(&map, &room(rectangle(1, 1, 10, 8)))
+            .unwrap();
+        let armchair = |color: Option<&str>| PropRequest {
+            asset: ARMCHAIR.to_owned(),
+            x: 3.0,
+            y: 3.0,
+            rotation_degrees: 0.0,
+            color: color.map(str::to_owned),
+        };
+        workspace.place_prop(&map, &armchair(None)).unwrap();
+        workspace
+            .place_prop(
+                &map,
+                &PropRequest {
+                    x: 6.0,
+                    ..armchair(Some("6b4a2e"))
+                },
+            )
+            .unwrap();
+        let warnings = workspace.validate(&map).unwrap();
+        let colorless: Vec<_> = warnings
+            .iter()
+            .filter(|warning| warning.contains("colorable"))
+            .collect();
+        assert_eq!(
+            colorless,
+            ["prop P0 (arm_chair_01) is colorable but has no color: Dungeondraft draws it red"]
+        );
     }
 
     #[test]

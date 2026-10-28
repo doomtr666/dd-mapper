@@ -26,8 +26,10 @@ impl GodotLiteral for PoolVector2Array {
             });
         }
         components
-            .chunks_exact(2)
-            .map(Vector2::from_components)
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| Vector2::from_components(pair))
             .collect::<Result<_, _>>()
             .map(Self)
     }

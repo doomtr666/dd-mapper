@@ -331,7 +331,7 @@ mod tests {
         let level = &world.levels["0"];
         assert!(level.walls.is_empty() && level.shapes.polygons.is_empty());
         assert!(level.objects.is_empty() && level.lights.is_empty());
-        assert!(level.patterns.is_empty());
+        assert_eq!(level.patterns, Vec::new());
         assert_eq!(level.tiles.cells.0, vec![-1; 80]);
         assert_eq!(level.terrain.splat.0.len(), 10 * 4 * 8 * 4 * 4);
     }

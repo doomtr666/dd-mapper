@@ -68,7 +68,7 @@ fn indexes_every_installed_pack() {
         pack: Some("default".to_owned()),
         ..AssetQuery::default()
     });
-    assert!(!tavern.is_empty());
+    assert_ne!(tavern, Vec::<&dd_catalog::Asset>::new());
 
     let crates = catalog.search(&AssetQuery {
         text: "crate".to_owned(),

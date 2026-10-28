@@ -337,6 +337,10 @@ pattern, terrain, path), tags or pack. Returns asset paths with their size in ce
 }
 
 #[tool_handler(router = self.tool_router)]
+#[expect(
+    clippy::unused_async_trait_impl,
+    reason = "rmcp's handler trait and its macro are async; these answers need no awaiting"
+)]
 impl ServerHandler for DdMapperServer {
     fn get_info(&self) -> ServerConfig {
         let capabilities = ServerCapabilities::builder()

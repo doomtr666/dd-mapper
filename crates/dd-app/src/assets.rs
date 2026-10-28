@@ -111,6 +111,8 @@ pub(crate) mod tests {
         "res://packs/LOREGD01/textures/paths/Artificial/Path_Conveyor_Belt_Large.webp";
     pub const CAN: &str =
         "res://packs/LOREGD01/textures/objects/[LORE] Clutter/Debris_Can_Empty.webp";
+    /// Tagged `Colorable`: Dungeondraft draws it red until it gets a color.
+    pub const ARMCHAIR: &str = "res://textures/objects/furniture/chairs/arm_chair_01.png";
 
     pub fn small_catalog() -> Catalog {
         let mut catalog = Catalog::default();
@@ -163,6 +165,9 @@ pub(crate) mod tests {
             asset.metrics = metrics;
             catalog.add(asset);
         }
+        let mut armchair = Asset::from_path(AssetPath::new(ARMCHAIR).unwrap()).unwrap();
+        armchair.tags.insert("Colorable".to_owned());
+        catalog.add(armchair);
         catalog.add_pack(PackInfo {
             id: "LOREGD01".to_owned(),
             name: "LORE Grimdorx A 3.09".to_owned(),

@@ -256,7 +256,7 @@ fn hundredths(value: f64) -> f64 {
 }
 
 /// The file name of an asset, without folders nor extension.
-fn asset_name(asset: &AssetPath) -> &str {
+pub(crate) fn asset_name(asset: &AssetPath) -> &str {
     let file = asset.as_str().rsplit('/').next().unwrap_or_default();
     file.rsplit_once('.').map_or(file, |(stem, _)| stem)
 }

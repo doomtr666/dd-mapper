@@ -1,0 +1,350 @@
+# AMBUSH ON THE OLD TOLL ROAD — a forest encounter by day, Dungeondraft's own assets only.
+# dd-mapper generate examples/forest_ambush.toml --out forest_ambush.dungeondraft_map --packs assets/packs
+#
+# The road crosses the wood from west to east. A felled pine blocks it; the
+# merchant's wagon lies smashed just before, its ox dead in the traces.
+#   The bandits watch from behind the boulders north of the road.
+#   Their camp (north-west): tents, a fire, the loot, a prisoner in a cage.
+#   South-east, off the road: a ring of old standing stones, where mushrooms glow.
+
+[style]
+background = "res://textures/terrain/terrain_grass.png"
+ambient = "c4c0ac"
+
+[map]
+width = 36
+height = 26
+
+# --- The ground -----------------------------------------------------------------------------
+
+[[terrain]]   # moss under the pines, north
+asset = "res://textures/terrain/terrain_moss.png"
+shape = { type = "tunnel", points = [[-1, 2], [12, 1], [24, 3], [37, 1.5]], width = 6 }
+falloff = 2.5
+roughness = 0.6
+seed = 1
+
+[[terrain]]   # and south
+asset = "res://textures/terrain/terrain_moss.png"
+shape = { type = "tunnel", points = [[-1, 24], [14, 25], [37, 24]], width = 6 }
+falloff = 2.5
+roughness = 0.6
+seed = 2
+
+[[terrain]]   # the old toll road
+asset = "res://textures/terrain/terrain_dirt.png"
+shape = { type = "tunnel", points = [[-1, 16], [12, 15.5], [24, 12.5], [37, 11]], width = 3 }
+falloff = 1.2
+roughness = 0.35
+seed = 3
+
+[[terrain]]   # the bandits' trampled clearing
+asset = "res://textures/terrain/terrain_dirt.png"
+shape = { type = "chamber", x = 8, y = 6, radius = 3.5 }
+falloff = 1.5
+roughness = 0.5
+seed = 4
+
+[[terrain]]   # bare rock inside the stone ring
+asset = "res://textures/terrain/terrain_rocky.png"
+shape = { type = "chamber", x = 28, y = 20.5, radius = 2.6 }
+falloff = 1.2
+roughness = 0.3
+seed = 5
+
+[[path]]   # wheel ruts
+asset = "res://textures/paths/wagon_trail.png"
+points = [[-1, 16.1], [12, 15.6], [24, 12.6], [37, 11.1]]
+width = 1.8
+
+[[path]]   # a footpath from the road to the stones
+asset = "res://textures/paths/path_blender_02.png"
+points = [[22, 13.5], [24.5, 16.5], [27, 18.5]]
+width = 0.8
+
+# --- The ambush on the road ------------------------------------------------------------------
+
+[[prop]]   # the felled pine across the road
+asset = "res://textures/objects/vegetation/fallen/log_05.png"
+at = [25, 12.4]
+rotation = 78
+
+[[prop]]   # the smashed wagon
+asset = "res://textures/objects/vehicles/wagon_wreckage_01.png"
+at = [19.5, 14.2]
+rotation = 70
+
+[[prop]]   # its ox, dead in the traces
+asset = "res://textures/objects/creatures/domesticated/ox_01.png"
+at = [21.9, 15.6]
+rotation = 120
+
+[[prop]]
+asset = "res://textures/objects/military/blood/blood_water_stain_01.png"
+at = [21.7, 15.9]
+color = "8a1a14"
+
+[[prop]]
+asset = "res://textures/objects/military/blood/blood_water_stain_03.png"
+at = [17.6, 15.7]
+rotation = 40
+color = "8a1a14"
+
+[[prop]]   # the merchant's lantern, dropped in the grass
+asset = "res://textures/objects/decor/lighting/lantern_02.png"
+at = [17.2, 13]
+
+[[scatter]]   # the cargo, strewn across the road
+assets = [
+    "res://textures/objects/supplies/barrels/barrel_02.png",
+    "res://textures/objects/supplies/crates/crate_02.png",
+    "res://textures/objects/supplies/sacks/grain-sack_02.png",
+    "res://textures/objects/clutter/floor/broken_pottery_11.png",
+]
+shape = { type = "polygon", points = [[15, 12], [23, 11], [23, 17], [15, 18]] }
+count = 7
+seed = 11
+outdoors = true
+
+[[scatter]]   # arrows in the dirt and in the wagon
+assets = ["res://textures/objects/military/weapons/arrow_01.png"]
+shape = { type = "polygon", points = [[16, 12], [23, 11], [23, 17], [16, 17]] }
+count = 6
+seed = 12
+outdoors = true
+
+[[prop]]   # the bandits' cover, north of the road
+asset = "res://textures/objects/clutter/boulders/boulder_08.png"
+at = [17.5, 9.6]
+
+[[prop]]
+asset = "res://textures/objects/clutter/boulders/boulder_06.png"
+at = [20.3, 8.8]
+
+[[prop]]
+asset = "res://textures/objects/clutter/boulders/boulder_01.png"
+at = [27.5, 8.5]
+rotation = 20
+
+[[prop]]
+asset = "res://textures/objects/clutter/boulders/boulder_10.png"
+at = [13.8, 11]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/roots/exposed_roots_02.png"
+at = [23, 8.2]
+
+[[scatter]]   # thorns along the ridge
+assets = [
+    "res://textures/objects/vegetation/thorns/thorns_15.png",
+    "res://textures/objects/vegetation/thorns/thorns_19.png",
+]
+shape = { type = "polygon", points = [[13, 8], [30, 7], [30, 10], [13, 12]] }
+count = 6
+seed = 13
+outdoors = true
+
+# --- The bandits' camp --------------------------------------------------------------------------
+
+[[prop]]
+asset = "res://textures/objects/camp/campfire_05.png"
+at = [8, 6]
+
+[[prop]]
+asset = "res://textures/objects/camp/tent_06.png"
+at = [5.2, 4.6]
+
+[[prop]]
+asset = "res://textures/objects/camp/tent_05.png"
+at = [11, 3.8]
+rotation = 20
+
+[[prop]]   # bedrolls round the fire
+asset = "res://textures/objects/camp/camp_bed_01.png"
+at = [6, 7.6]
+rotation = 60
+color = "6b5a3e"
+
+[[prop]]
+asset = "res://textures/objects/camp/camp_bed_03.png"
+at = [10.2, 7.2]
+rotation = 300
+color = "5a4a3a"
+
+[[prop]]   # stumps for seats, a spit over the fire
+asset = "res://textures/objects/vegetation/trees/stump_01.png"
+at = [9.4, 5.6]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/stump_02.png"
+at = [7, 4.9]
+
+[[prop]]
+asset = "res://textures/objects/activities/cooking/spit_roast_02.png"
+at = [8, 6]
+rotation = 90
+
+[[prop]]   # the loot, and a prisoner who saw too much
+asset = "res://textures/objects/furniture/storage/chest_open_01.png"
+at = [3.8, 7.2]
+
+[[prop]]
+asset = "res://textures/objects/supplies/crates/crate_04.png"
+at = [3.6, 8.4]
+
+[[prop]]
+asset = "res://textures/objects/supplies/cages/cage_05.png"
+at = [11.8, 8.6]
+
+[[prop]]
+asset = "res://textures/objects/military/weapons/bow_01.png"
+at = [9.5, 4.3]
+rotation = 30
+
+# --- The standing stones -------------------------------------------------------------------------
+
+[[prop]]
+asset = "res://textures/objects/decor/statues/statue_stone_05.png"
+at = [28, 18]
+
+[[prop]]
+asset = "res://textures/objects/decor/statues/statue_stone_06.png"
+at = [30.4, 19.7]
+rotation = 72
+
+[[prop]]
+asset = "res://textures/objects/decor/statues/statue_stone_07.png"
+at = [29.5, 22.6]
+rotation = 144
+
+[[prop]]
+asset = "res://textures/objects/decor/statues/statue_stone_05.png"
+at = [26.5, 22.6]
+rotation = 216
+
+[[prop]]
+asset = "res://textures/objects/decor/statues/statue_stone_06.png"
+at = [25.6, 19.7]
+rotation = 288
+
+[[prop]]   # mushrooms glowing in the middle of the ring
+asset = "res://textures/objects/vegetation/mushrooms/magic_mushrooms_06.png"
+at = [28, 20.5]
+color = "60d8ff"
+
+[[prop]]
+asset = "res://textures/objects/vegetation/mushrooms/magic_mushrooms_03.png"
+at = [27.2, 21.3]
+color = "60d8ff"
+
+# --- The wood ----------------------------------------------------------------------------------------
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_04.png"
+at = [35, 25.5]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_03.png"
+at = [16, 3]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_03.png"
+at = [30, 3]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_02.png"
+at = [21.5, 4.2]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_02.png"
+at = [34.5, 6.5]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_03.png"
+at = [2, 11]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_03.png"
+at = [4, 22]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_02.png"
+at = [10, 21.5]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_03.png"
+at = [16, 22.5]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_01.png"
+at = [21, 20.5]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/autumn_tree_04.png"
+at = [34, 16]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/dead_tree_03.png"
+at = [1.8, 2]
+
+[[prop]]
+asset = "res://textures/objects/vegetation/trees/pine_tree_01.png"
+at = [24.5, 24.5]
+
+[[scatter]]   # ferns and undergrowth
+assets = [
+    "res://textures/objects/vegetation/ferns/fern_01.png",
+    "res://textures/objects/vegetation/ferns/fern_02.png",
+    "res://textures/objects/vegetation/ferns/fern_03.png",
+    "res://textures/objects/vegetation/shrubs/bush_green_simple_07.png",
+]
+shape = { type = "polygon", points = [[0, 18], [36, 14], [36, 26], [0, 26]] }
+count = 16
+seed = 14
+outdoors = true
+
+[[scatter]]
+assets = [
+    "res://textures/objects/vegetation/ferns/fern_02.png",
+    "res://textures/objects/vegetation/shrubs/bush_green_simple_04.png",
+    "res://textures/objects/vegetation/fallen/log_02.png",
+]
+shape = { type = "polygon", points = [[13, 0], [36, 0], [36, 9], [13, 7]] }
+count = 8
+seed = 15
+outdoors = true
+
+[[scatter]]   # dead leaves and grass tufts everywhere
+assets = [
+    "res://textures/objects/vegetation/fallen/dead_leaves_04.png",
+    "res://textures/objects/vegetation/fallen/dead_leaves_05.png",
+    "res://textures/objects/vegetation/grass/grass_10.png",
+    "res://textures/objects/vegetation/grass/grass_18.png",
+]
+shape = { type = "polygon", points = [[0, 0], [36, 0], [36, 26], [0, 26]] }
+count = 40
+seed = 16
+outdoors = true
+
+# --- Light ---------------------------------------------------------------------------------------------
+
+[[light]]   # embers in the bandits' fire
+asset = "res://textures/lights/soft.png"
+at = [8, 6]
+range = 2
+intensity = 0.6
+color = "ff9040"
+
+[[light]]   # the mushrooms, glowing faintly even by day
+asset = "res://textures/lights/soft.png"
+at = [28, 20.6]
+range = 2.5
+intensity = 0.6
+color = "70e0ff"
+
+[[light]]   # sun on the road, where the trees open
+asset = "res://textures/lights/soft.png"
+at = [24, 13]
+range = 9
+intensity = 0.35
+color = "fff4d0"

@@ -64,7 +64,7 @@ mod tests {
         assert!(wall.closed_loop && wall.normalize_uv && wall.shadow);
         assert_eq!((wall.wall_type, wall.joint), (0, 1));
         assert_eq!(wall.node_id, NodeId(7));
-        assert!(wall.portals.is_empty());
+        assert_eq!(wall.portals, Vec::new());
     }
 
     #[test]
