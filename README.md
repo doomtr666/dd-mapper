@@ -60,28 +60,31 @@ The server speaks MCP over stdio.
 
 ### Claude Code
 
-Add it to a project with:
-
-```sh
-claude mcp add dd-mapper --scope project -- /path/to/dd-mcp --packs /path/to/packs --maps /path/to/maps
-```
-
-This writes a `.mcp.json` file like this one (Windows paths):
+The repository ships a `.mcp.json` that starts the server from this checkout: build
+it with `cargo build --release`, put your packs in `assets/packs`, and open Claude Code
+at the root of the repository. Paths are relative to that root:
 
 ```json
 {
   "mcpServers": {
     "dd-mapper": {
-      "command": "I:\\Dev\\dd-mapper\\target\\release\\dd-mcp.exe",
-      "args": ["--packs", "I:\\Dev\\dd-mapper\\assets\\packs", "--maps", "I:\\Dev\\dd-mapper\\assets\\maps"]
+      "command": "target/release/dd-mcp",
+      "args": ["--packs", "assets/packs", "--maps", "assets/maps"]
     }
   }
 }
 ```
 
+To use it from another project, add it there with absolute paths:
+
+```sh
+claude mcp add dd-mapper --scope project -- /path/to/dd-mcp --packs /path/to/packs --maps /path/to/maps
+```
+
 ### Claude Desktop
 
-Add the same `mcpServers` entry to `claude_desktop_config.json`:
+Add the same `mcpServers` entry to `claude_desktop_config.json`, with absolute paths
+(Claude Desktop does not start servers from a project directory):
 
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`

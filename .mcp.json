@@ -1,12 +1,12 @@
 {
   "mcpServers": {
     "dd-mapper": {
-      "command": "I:\\Dev\\dd-mapper\\target\\release\\dd-mcp.exe",
+      "command": "target/release/dd-mcp",
       "args": [
         "--packs",
-        "I:\\Dev\\dd-mapper\\assets\\packs",
+        "assets/packs",
         "--maps",
-        "I:\\Dev\\dd-mapper\\assets\\maps"
+        "assets/maps"
       ],
       "env": {}
     }

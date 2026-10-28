@@ -1,0 +1,4 @@
+# LF everywhere, so that a checkout on Windows matches the files byte for byte.
+* text=auto eol=lf
+# Maps are compared byte for byte with what the exporter writes.
+*.dungeondraft_map -text
